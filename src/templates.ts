@@ -15,6 +15,7 @@ import {
   HUGO_TEMPLATE_METHODS,
   HUGO_TEMPLATE_OBJECTS,
 } from "./constants.js";
+import { getOfficialDocSymbols } from "./officialDocs.js";
 import { offsetAt } from "./utils.js";
 import { rangeFromOffsets } from "./utils.js";
 
@@ -88,6 +89,13 @@ export function templateCompletion(
     detail: "Hugo template method",
   }));
 
+  const officialItems = getOfficialDocSymbols().map((item) => ({
+    label: item,
+    kind: item.startsWith(".") ? CompletionItemKind.Method : CompletionItemKind.Function,
+    insertText: item,
+    detail: "Official Hugo docs",
+  }));
+
   const shortcodeObjectItems = options.relativePath?.startsWith("layouts/shortcodes/")
     ? HUGO_SHORTCODE_TEMPLATE_OBJECTS.map((item) => ({
         label: item,
@@ -111,6 +119,7 @@ export function templateCompletion(
     ...functionItems,
     ...objectItems,
     ...methodItems,
+    ...officialItems,
     ...shortcodeObjectItems,
     ...shortcodeMethodItems,
   ];

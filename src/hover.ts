@@ -13,8 +13,10 @@ import {
   TEMPLATE_METHOD_DOCS,
   TEMPLATE_OBJECT_DOCS,
 } from "./docs.js";
+import type { OfficialDocEntry } from "./officialDocs.js";
 import type { ProjectContext } from "./types.js";
 import { extractFrontMatter } from "./frontMatter.js";
+import { getOfficialDocEntriesForCandidates } from "./officialDocs.js";
 import { offsetAt, rangeFromOffsets } from "./utils.js";
 
 export function getHover(
@@ -76,6 +78,8 @@ function getFrontMatterHover(text: string, position: Position): Hover | null {
         `Expected type: \`${FRONT_MATTER_KEY_TYPES[key]?.join(" | ") ?? doc.expected}\``,
         doc.notes?.length ? `Notes:\n${doc.notes.map((note) => `- ${note}`).join("\n")}` : "",
         doc.example ? `Example:\n\`\`\`${block.kind}\n${doc.example}\n\`\`\`` : "",
+        "Since: not stated on the official Hugo docs page",
+        "Docs: [Hugo front matter](https://gohugo.io/content-management/front-matter/)",
       ]),
     };
   }
@@ -112,6 +116,8 @@ function getShortcodeHover(
         doc ? `Usage:\n\`\`\`md\n${doc.usage}\n\`\`\`` : "",
         doc?.notes?.length ? `Notes:\n${doc.notes.map((note) => `- ${note}`).join("\n")}` : "",
         isProjectShortcode ? "Source: project shortcode under `layouts/shortcodes`." : "Source: built-in Hugo shortcode allowlist.",
+        "Since: not stated on the official Hugo docs page",
+        "Docs: [Hugo shortcodes](https://gohugo.io/content-management/shortcodes/)",
       ]),
     };
   }
@@ -164,6 +170,8 @@ function getPartialHover(
           ? "Status: found in this project."
           : "Status: not found in the current project scan.",
         "Tip: partials usually receive the current context `.` or a custom `dict` value.",
+        "Since: not stated on the official Hugo docs page",
+        "Docs: [Hugo partial templates](https://gohugo.io/templates/partial/)",
       ]),
     };
   }
@@ -210,6 +218,14 @@ function getActionTokenHover(
 
       const relativeOffset = offset - tokenStart;
       const candidates = buildDocumentCandidates(token, relativeOffset);
+      const officialEntries = getOfficialDocEntriesForCandidates(candidates, { relativePath });
+
+      if (officialEntries.length > 0) {
+        return {
+          range: rangeFromOffsets(text, tokenStart, tokenEnd),
+          contents: markdown(officialEntries.flatMap((entry, index) => formatOfficialDocEntry(entry, index))),
+        };
+      }
 
       const keywordToken = findFirstCandidate(candidates, TEMPLATE_KEYWORD_DOCS);
       if (keywordToken) {
@@ -223,6 +239,8 @@ function getActionTokenHover(
             keywordDoc.notes?.length
               ? `Notes:\n${keywordDoc.notes.map((note) => `- ${note}`).join("\n")}`
               : "",
+            "Since: not stated on the official Hugo docs page",
+            "Docs: [Hugo templates](https://gohugo.io/templates/introduction/)",
           ]),
         };
       }
@@ -239,6 +257,8 @@ function getActionTokenHover(
             functionDoc.notes?.length
               ? `Notes:\n${functionDoc.notes.map((note) => `- ${note}`).join("\n")}`
               : "",
+            "Since: not stated on the official Hugo docs page",
+            "Docs: [Hugo functions](https://gohugo.io/functions/)",
           ]),
         };
       }
@@ -259,6 +279,8 @@ function getActionTokenHover(
               shortcodeMethodDoc.notes?.length
                 ? `Notes:\n${shortcodeMethodDoc.notes.map((note) => `- ${note}`).join("\n")}`
                 : "",
+              "Since: not stated on the official Hugo docs page",
+              "Docs: [Hugo shortcode methods](https://gohugo.io/methods/shortcode/)",
             ]),
           };
         }
@@ -278,6 +300,8 @@ function getActionTokenHover(
               shortcodeObjectDoc.notes?.length
                 ? `Notes:\n${shortcodeObjectDoc.notes.map((note) => `- ${note}`).join("\n")}`
                 : "",
+              "Since: not stated on the official Hugo docs page",
+              "Docs: [Hugo shortcode methods](https://gohugo.io/methods/shortcode/)",
             ]),
           };
         }
@@ -295,6 +319,8 @@ function getActionTokenHover(
             extraDoc.notes?.length
               ? `Notes:\n${extraDoc.notes.map((note) => `- ${note}`).join("\n")}`
               : "",
+            "Since: not stated on the official Hugo docs page",
+            "Docs: [Hugo documentation](https://gohugo.io/documentation/)",
           ]),
         };
       }
@@ -311,6 +337,8 @@ function getActionTokenHover(
             moreDoc.notes?.length
               ? `Notes:\n${moreDoc.notes.map((note) => `- ${note}`).join("\n")}`
               : "",
+            "Since: not stated on the official Hugo docs page",
+            "Docs: [Hugo methods](https://gohugo.io/methods/)",
           ]),
         };
       }
@@ -330,6 +358,8 @@ function getActionTokenHover(
             methodDoc.notes?.length
               ? `Notes:\n${methodDoc.notes.map((note) => `- ${note}`).join("\n")}`
               : "",
+            "Since: not stated on the official Hugo docs page",
+            "Docs: [Hugo methods](https://gohugo.io/methods/)",
           ]),
         };
       }
@@ -349,6 +379,8 @@ function getActionTokenHover(
             objectDoc.notes?.length
               ? `Notes:\n${objectDoc.notes.map((note) => `- ${note}`).join("\n")}`
               : "",
+            "Since: not stated on the official Hugo docs page",
+            "Docs: [Hugo methods](https://gohugo.io/methods/)",
           ]),
         };
       }
@@ -421,4 +453,18 @@ function buildDotSuffixCandidates(token: string): string[] {
   }
 
   return candidates;
+}
+
+function formatOfficialDocEntry(entry: OfficialDocEntry, index: number): string[] {
+  const header = entry.kind === "method" ? "**Official Hugo method:**" : "**Official Hugo function:**";
+  const contextLine = entry.kind === "method" ? `Receiver: \`${entry.receiver}\`` : `Namespace: \`${entry.namespace}\``;
+
+  return [
+    index === 0 ? `${header} \`${entry.symbol}\`` : `---\n${header} \`${entry.symbol}\``,
+    contextLine,
+    entry.summary || "No summary extracted from the official Hugo docs page.",
+    entry.usage ? `Usage:\n\`\`\`gotmpl\n${entry.usage}\n\`\`\`` : "",
+    `Since: ${entry.sinceVersion ? `v${entry.sinceVersion}` : "not stated on the official Hugo docs page"}`,
+    `Docs: [${entry.title || entry.symbol}](${entry.url})`,
+  ];
 }

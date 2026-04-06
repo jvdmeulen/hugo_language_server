@@ -89,8 +89,11 @@ test("shows hover for template keywords and functions", () => {
     relativePath: "layouts/_default/list.html",
   });
 
-  assert.match((keywordHover?.contents as { value: string }).value, /template keyword.*`range`/i);
-  assert.match((functionHover?.contents as { value: string }).value, /template function.*`printf`/i);
+  assert.match((keywordHover?.contents as { value: string }).value, /Official Hugo function:.*`range`/i);
+  assert.match((keywordHover?.contents as { value: string }).value, /Docs: \[.*\]\(https:\/\/gohugo\.io\/functions\//i);
+  assert.match((keywordHover?.contents as { value: string }).value, /Since:/i);
+  assert.match((functionHover?.contents as { value: string }).value, /Official Hugo function:.*`fmt\.Printf`|Official Hugo function:.*`printf`/i);
+  assert.match((functionHover?.contents as { value: string }).value, /Docs: \[.*\]\(https:\/\/gohugo\.io\/functions\//i);
 });
 
 test("shows hover for comparison functions inside template expressions", () => {
@@ -107,12 +110,13 @@ test("shows hover for comparison functions inside template expressions", () => {
   });
 
   assert.ok(hover?.contents);
-  assert.match((hover?.contents as { value: string }).value, /template function.*`eq`/i);
-  assert.match((hover?.contents as { value: string }).value, /all provided arguments are equal/i);
+  assert.match((hover?.contents as { value: string }).value, /Official Hugo function:.*`compare\.Eq`|Official Hugo function:.*`eq`/i);
+  assert.match((hover?.contents as { value: string }).value, /compare strings, boolean values, dates, slices, maps, and pages/i);
+  assert.match((hover?.contents as { value: string }).value, /Docs: \[.*\]\(https:\/\/gohugo\.io\/functions\//i);
 });
 
 test("shows hover for template objects and scratch methods", () => {
-  const scratchHover = getHover('{{ .Scratch.Get "hero" }}', { line: 0, character: 11 }, {
+  const scratchHover = getHover('{{ .Scratch.Get "hero" }}', { line: 0, character: 6 }, {
     project: {
       workspaceRoot: "/tmp/demo",
       hugoRoot: "/tmp/demo",
@@ -136,10 +140,12 @@ test("shows hover for template objects and scratch methods", () => {
   });
 
   assert.ok(scratchHover?.contents);
-  assert.match((scratchHover?.contents as { value: string }).value, /template method.*`\.Scratch\.Get`/i);
-  assert.match((scratchHover?.contents as { value: string }).value, /returns a scratch value by key/i);
+  assert.match((scratchHover?.contents as { value: string }).value, /Official Hugo method:.*`\.Scratch`/i);
+  assert.match((scratchHover?.contents as { value: string }).value, /Receiver: `page`/i);
+  assert.match((scratchHover?.contents as { value: string }).value, /Docs: \[.*\]\(https:\/\/gohugo\.io\/methods\/page\/scratch\//i);
   assert.ok(siteHover?.contents);
-  assert.match((siteHover?.contents as { value: string }).value, /template object.*`\.Site`/i);
+  assert.match((siteHover?.contents as { value: string }).value, /Official Hugo method:.*`\.Site`/i);
+  assert.match((siteHover?.contents as { value: string }).value, /Receiver: `page`/i);
 });
 
 test("shows hover for extended namespaced and page symbols", () => {
@@ -167,9 +173,10 @@ test("shows hover for extended namespaced and page symbols", () => {
   });
 
   assert.ok(stringsHover?.contents);
-  assert.match((stringsHover?.contents as { value: string }).value, /template function.*`strings\.TrimPrefix`/i);
+  assert.match((stringsHover?.contents as { value: string }).value, /Official Hugo function:.*`strings\.TrimPrefix`/i);
   assert.ok(ancestorsHover?.contents);
-  assert.match((ancestorsHover?.contents as { value: string }).value, /template object.*`\.Ancestors`/i);
+  assert.match((ancestorsHover?.contents as { value: string }).value, /Official Hugo method:.*`\.Ancestors`/i);
+  assert.match((ancestorsHover?.contents as { value: string }).value, /Docs: \[.*\]\(https:\/\/gohugo\.io\/methods\/page\/ancestors\//i);
 });
 
 test("shows hover for additional page and site symbols", () => {
@@ -197,9 +204,12 @@ test("shows hover for additional page and site symbols", () => {
   });
 
   assert.ok(byDateHover?.contents);
-  assert.match((byDateHover?.contents as { value: string }).value, /template method.*`\.ByDate`/i);
+  assert.match((byDateHover?.contents as { value: string }).value, /Official Hugo method:.*`\.ByDate`/i);
+  assert.match((byDateHover?.contents as { value: string }).value, /Docs: \[.*\]\(https:\/\/gohugo\.io\/methods\//i);
+  assert.match((byDateHover?.contents as { value: string }).value, /Since:/i);
   assert.ok(menusHover?.contents);
-  assert.match((menusHover?.contents as { value: string }).value, /template object.*`\.Menus`/i);
+  assert.match((menusHover?.contents as { value: string }).value, /Official Hugo method:.*`\.Menus`/i);
+  assert.match((menusHover?.contents as { value: string }).value, /Receiver: `site`/i);
 });
 
 test("shows hover for shortcode template symbols", () => {
@@ -227,10 +237,12 @@ test("shows hover for shortcode template symbols", () => {
   });
 
   assert.ok(getHoverResult?.contents);
-  assert.match((getHoverResult?.contents as { value: string }).value, /shortcode template method.*`\.Get`/i);
-  assert.match((getHoverResult?.contents as { value: string }).value, /parameter by index or by name/i);
+  assert.match((getHoverResult?.contents as { value: string }).value, /Official Hugo method:.*`\.Get`/i);
+  assert.match((getHoverResult?.contents as { value: string }).value, /Receiver: `shortcode`/i);
+  assert.doesNotMatch((getHoverResult?.contents as { value: string }).value, /Receiver: `taxonomy`/i);
   assert.ok(innerHoverResult?.contents);
-  assert.match((innerHoverResult?.contents as { value: string }).value, /shortcode template object.*`\.Inner`/i);
+  assert.match((innerHoverResult?.contents as { value: string }).value, /Official Hugo method:.*`\.Inner`/i);
+  assert.match((innerHoverResult?.contents as { value: string }).value, /Receiver: `shortcode`/i);
 });
 
 test("shows hover for additional shortcode methods from official docs", () => {
@@ -258,7 +270,10 @@ test("shows hover for additional shortcode methods from official docs", () => {
   });
 
   assert.ok(refHover?.contents);
-  assert.match((refHover?.contents as { value: string }).value, /shortcode template method.*`\.Ref`/i);
+  assert.match((refHover?.contents as { value: string }).value, /Official Hugo method:.*`\.Ref`/i);
+  assert.match((refHover?.contents as { value: string }).value, /Receiver: `shortcode`/i);
+  assert.doesNotMatch((refHover?.contents as { value: string }).value, /Receiver: `page`/i);
   assert.ok(scratchHover?.contents);
-  assert.match((scratchHover?.contents as { value: string }).value, /shortcode template object.*`\.Scratch`/i);
+  assert.match((scratchHover?.contents as { value: string }).value, /Official Hugo method:.*`\.Scratch`/i);
+  assert.match((scratchHover?.contents as { value: string }).value, /Receiver: `shortcode`/i);
 });
