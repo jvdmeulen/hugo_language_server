@@ -172,6 +172,36 @@ test("shows hover for extended namespaced and page symbols", () => {
   assert.match((ancestorsHover?.contents as { value: string }).value, /template object.*`\.Ancestors`/i);
 });
 
+test("shows hover for additional page and site symbols", () => {
+  const byDateHover = getHover("{{ range .Pages.ByDate }}", { line: 0, character: 18 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/list.html",
+  });
+  const menusHover = getHover("{{ .Site.Menus.main }}", { line: 0, character: 10 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/list.html",
+  });
+
+  assert.ok(byDateHover?.contents);
+  assert.match((byDateHover?.contents as { value: string }).value, /template method.*`\.ByDate`/i);
+  assert.ok(menusHover?.contents);
+  assert.match((menusHover?.contents as { value: string }).value, /template object.*`\.Menus`/i);
+});
+
 test("shows hover for shortcode template symbols", () => {
   const getHoverResult = getHover('{{ .Get "title" }}', { line: 0, character: 5 }, {
     project: {

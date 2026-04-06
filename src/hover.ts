@@ -4,6 +4,7 @@ import { FRONT_MATTER_KEY_TYPES } from "./constants.js";
 import {
   FRONT_MATTER_DOCS,
   EXTRA_TEMPLATE_SYMBOL_DOCS,
+  MORE_TEMPLATE_SYMBOL_DOCS,
   SHORTCODE_TEMPLATE_METHOD_DOCS,
   SHORTCODE_TEMPLATE_OBJECT_DOCS,
   SHORTCODE_DOCS,
@@ -207,12 +208,16 @@ function getActionTokenHover(
         continue;
       }
 
-      const keywordDoc = TEMPLATE_KEYWORD_DOCS[token];
-      if (keywordDoc) {
+      const relativeOffset = offset - tokenStart;
+      const candidates = buildDocumentCandidates(token, relativeOffset);
+
+      const keywordToken = findFirstCandidate(candidates, TEMPLATE_KEYWORD_DOCS);
+      if (keywordToken) {
+        const keywordDoc = TEMPLATE_KEYWORD_DOCS[keywordToken];
         return {
-          range: rangeFromOffsets(text, tokenStart, tokenEnd),
+          range: rangeFromOffsets(text, tokenStart, tokenStart + keywordToken.length),
           contents: markdown([
-            `**Hugo template keyword:** \`${token}\``,
+            `**Hugo template keyword:** \`${keywordToken}\``,
             keywordDoc.summary,
             `Usage:\n\`\`\`gotmpl\n${keywordDoc.usage}\n\`\`\``,
             keywordDoc.notes?.length
@@ -222,12 +227,13 @@ function getActionTokenHover(
         };
       }
 
-      const functionDoc = TEMPLATE_FUNCTION_DOCS[token];
-      if (functionDoc) {
+      const functionToken = findFirstCandidate(candidates, TEMPLATE_FUNCTION_DOCS);
+      if (functionToken) {
+        const functionDoc = TEMPLATE_FUNCTION_DOCS[functionToken];
         return {
-          range: rangeFromOffsets(text, tokenStart, tokenEnd),
+          range: rangeFromOffsets(text, tokenStart, tokenStart + functionToken.length),
           contents: markdown([
-            `**Hugo template function:** \`${token}\``,
+            `**Hugo template function:** \`${functionToken}\``,
             functionDoc.summary,
             `Usage:\n\`\`\`gotmpl\n${functionDoc.usage}\n\`\`\``,
             functionDoc.notes?.length
@@ -238,7 +244,9 @@ function getActionTokenHover(
       }
 
       if (isShortcodeTemplate) {
-        const shortcodeMethodToken = findDocumentedPrefix(token, SHORTCODE_TEMPLATE_METHOD_DOCS);
+        const shortcodeMethodToken =
+          findFirstCandidate(candidates, SHORTCODE_TEMPLATE_METHOD_DOCS) ??
+          findDocumentedPrefix(token, SHORTCODE_TEMPLATE_METHOD_DOCS);
         if (shortcodeMethodToken) {
           const shortcodeMethodDoc = SHORTCODE_TEMPLATE_METHOD_DOCS[shortcodeMethodToken];
           const shortcodeMethodEnd = tokenStart + shortcodeMethodToken.length;
@@ -255,7 +263,9 @@ function getActionTokenHover(
           };
         }
 
-        const shortcodeObjectToken = findDocumentedPrefix(token, SHORTCODE_TEMPLATE_OBJECT_DOCS);
+        const shortcodeObjectToken =
+          findFirstCandidate(candidates, SHORTCODE_TEMPLATE_OBJECT_DOCS) ??
+          findDocumentedPrefix(token, SHORTCODE_TEMPLATE_OBJECT_DOCS);
         if (shortcodeObjectToken) {
           const shortcodeObjectDoc = SHORTCODE_TEMPLATE_OBJECT_DOCS[shortcodeObjectToken];
           const shortcodeObjectEnd = tokenStart + shortcodeObjectToken.length;
@@ -273,12 +283,13 @@ function getActionTokenHover(
         }
       }
 
-      const extraDoc = EXTRA_TEMPLATE_SYMBOL_DOCS[token];
-      if (extraDoc) {
+      const extraToken = findFirstCandidate(candidates, EXTRA_TEMPLATE_SYMBOL_DOCS);
+      if (extraToken) {
+        const extraDoc = EXTRA_TEMPLATE_SYMBOL_DOCS[extraToken];
         return {
-          range: rangeFromOffsets(text, tokenStart, tokenEnd),
+          range: rangeFromOffsets(text, tokenStart, tokenStart + extraToken.length),
           contents: markdown([
-            `**Hugo template ${extraDoc.kind}:** \`${token}\``,
+            `**Hugo template ${extraDoc.kind}:** \`${extraToken}\``,
             extraDoc.summary,
             `Usage:\n\`\`\`gotmpl\n${extraDoc.usage}\n\`\`\``,
             extraDoc.notes?.length
@@ -288,7 +299,25 @@ function getActionTokenHover(
         };
       }
 
-      const methodToken = findDocumentedPrefix(token, TEMPLATE_METHOD_DOCS);
+      const moreToken = findFirstCandidate(candidates, MORE_TEMPLATE_SYMBOL_DOCS);
+      if (moreToken) {
+        const moreDoc = MORE_TEMPLATE_SYMBOL_DOCS[moreToken];
+        return {
+          range: rangeFromOffsets(text, tokenStart, tokenStart + moreToken.length),
+          contents: markdown([
+            `**Hugo template ${moreDoc.kind}:** \`${moreToken}\``,
+            moreDoc.summary,
+            `Usage:\n\`\`\`gotmpl\n${moreDoc.usage}\n\`\`\``,
+            moreDoc.notes?.length
+              ? `Notes:\n${moreDoc.notes.map((note) => `- ${note}`).join("\n")}`
+              : "",
+          ]),
+        };
+      }
+
+      const methodToken =
+        findFirstCandidate(candidates, TEMPLATE_METHOD_DOCS) ??
+        findDocumentedPrefix(token, TEMPLATE_METHOD_DOCS);
       if (methodToken) {
         const methodDoc = TEMPLATE_METHOD_DOCS[methodToken];
         const methodEnd = tokenStart + methodToken.length;
@@ -305,7 +334,9 @@ function getActionTokenHover(
         };
       }
 
-      const objectToken = findDocumentedPrefix(token, TEMPLATE_OBJECT_DOCS);
+      const objectToken =
+        findFirstCandidate(candidates, TEMPLATE_OBJECT_DOCS) ??
+        findDocumentedPrefix(token, TEMPLATE_OBJECT_DOCS);
       if (objectToken) {
         const objectDoc = TEMPLATE_OBJECT_DOCS[objectToken];
         const objectEnd = tokenStart + objectToken.length;
@@ -331,9 +362,63 @@ function findDocumentedPrefix<T>(
   token: string,
   docs: Record<string, T>,
 ): string | undefined {
+  const suffixCandidates = buildDotSuffixCandidates(token);
   const candidates = Object.keys(docs)
-    .filter((key) => token === key || token.startsWith(`${key}.`))
+    .filter((key) => token === key || token.startsWith(`${key}.`) || suffixCandidates.includes(key))
     .sort((left, right) => right.length - left.length);
 
   return candidates[0];
+}
+
+function findFirstCandidate<T>(
+  candidates: string[],
+  docs: Record<string, T>,
+): string | undefined {
+  return candidates.find((candidate) => candidate in docs);
+}
+
+function buildDocumentCandidates(token: string, relativeOffset: number): string[] {
+  const candidates: string[] = [token];
+
+  if (!token.startsWith(".") || !token.includes(".")) {
+    return [...new Set(candidates)];
+  }
+
+  const parts = token.split(".").filter(Boolean);
+  let currentStart = 0;
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const segment = parts[index] ?? "";
+    const segmentLength = segment.length + 1;
+    const segmentEnd = currentStart + segmentLength;
+
+    if (relativeOffset >= currentStart && relativeOffset <= segmentEnd) {
+      const prefix = `.${parts.slice(0, index + 1).join(".")}`;
+      const local = `.${parts[index]}`;
+      candidates.unshift(prefix);
+      if (local !== prefix) {
+        candidates.push(local);
+      }
+      break;
+    }
+
+    currentStart = segmentEnd;
+  }
+
+  return [...new Set(candidates)];
+}
+
+function buildDotSuffixCandidates(token: string): string[] {
+  if (!token.startsWith(".")) {
+    return [];
+  }
+
+  const parts = token.split(".").filter(Boolean);
+  const candidates: string[] = [];
+
+  for (let index = 1; index < parts.length; index += 1) {
+    candidates.push(`.${parts.slice(index).join(".")}`);
+  }
+
+  return candidates;
 }
