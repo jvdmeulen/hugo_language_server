@@ -202,3 +202,33 @@ test("shows hover for shortcode template symbols", () => {
   assert.ok(innerHoverResult?.contents);
   assert.match((innerHoverResult?.contents as { value: string }).value, /shortcode template object.*`\.Inner`/i);
 });
+
+test("shows hover for additional shortcode methods from official docs", () => {
+  const refHover = getHover('{{ .Ref (dict "path" "docs/start-here") }}', { line: 0, character: 5 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/shortcodes/callout.html",
+  });
+  const scratchHover = getHover('{{ .Scratch.Set "x" "y" }}', { line: 0, character: 5 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/shortcodes/callout.html",
+  });
+
+  assert.ok(refHover?.contents);
+  assert.match((refHover?.contents as { value: string }).value, /shortcode template method.*`\.Ref`/i);
+  assert.ok(scratchHover?.contents);
+  assert.match((scratchHover?.contents as { value: string }).value, /shortcode template object.*`\.Scratch`/i);
+});

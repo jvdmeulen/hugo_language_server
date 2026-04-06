@@ -1340,6 +1340,11 @@ export const SHORTCODE_TEMPLATE_OBJECT_DOCS: Record<
     usage: "{{ .Inner }}",
     notes: ["Available when the shortcode wraps content instead of being self-closing."],
   },
+  ".InnerDeindent": {
+    summary: "Inner shortcode content with common indentation removed.",
+    usage: "{{ .InnerDeindent }}",
+    notes: ["Useful when a paired shortcode contains indented Markdown or code."],
+  },
   ".IsNamedParams": {
     summary: "Boolean indicating whether the shortcode was called with named parameters.",
     usage: "{{ if .IsNamedParams }}...{{ end }}",
@@ -1368,6 +1373,18 @@ export const SHORTCODE_TEMPLATE_OBJECT_DOCS: Record<
     summary: "All shortcode parameters as a collection or map-like structure.",
     usage: "{{ .Params }}",
   },
+  ".Scratch": {
+    summary: "Shortcode-scoped scratch pad for temporary state during shortcode rendering.",
+    usage: '{{ .Scratch.Set "key" "value" }}',
+  },
+  ".Site": {
+    summary: "The site object available from the shortcode context.",
+    usage: "{{ .Site.Title }}",
+  },
+  ".Store": {
+    summary: "Shortcode-scoped store for temporary data, similar to a shortcode-local scratch pad.",
+    usage: '{{ .Store.Set "key" "value" }}',
+  },
 };
 
 export const SHORTCODE_TEMPLATE_METHOD_DOCS: Record<
@@ -1381,5 +1398,13 @@ export const SHORTCODE_TEMPLATE_METHOD_DOCS: Record<
       "Use numeric indexes for positional params and strings for named params.",
       "Most commonly used inside `layouts/shortcodes/*.html`.",
     ],
+  },
+  ".Ref": {
+    summary: "Builds an absolute URL to another page from inside a shortcode template.",
+    usage: '{{ .Ref (dict "path" "docs/start-here") }}',
+  },
+  ".RelRef": {
+    summary: "Builds a relative URL to another page from inside a shortcode template.",
+    usage: '{{ .RelRef (dict "path" "docs/start-here") }}',
   },
 };

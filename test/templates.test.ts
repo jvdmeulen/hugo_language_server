@@ -161,6 +161,8 @@ test("offers shortcode template symbol completions", () => {
   assert.ok(items.some((item) => item.label === ".Get"));
   assert.ok(items.some((item) => item.label === ".Inner"));
   assert.ok(items.some((item) => item.label === ".IsNamedParams"));
+  assert.ok(items.some((item) => item.label === ".Ref"));
+  assert.ok(items.some((item) => item.label === ".Store"));
 });
 
 test("computes relative project path for templates", () => {

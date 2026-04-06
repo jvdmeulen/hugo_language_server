@@ -314,6 +314,7 @@ export const HUGO_TEMPLATE_METHODS = [
 
 export const HUGO_SHORTCODE_TEMPLATE_OBJECTS = [
   ".Inner",
+  ".InnerDeindent",
   ".IsNamedParams",
   ".Name",
   ".Ordinal",
@@ -321,10 +322,15 @@ export const HUGO_SHORTCODE_TEMPLATE_OBJECTS = [
   ".Parent",
   ".Position",
   ".Params",
+  ".Scratch",
+  ".Site",
+  ".Store",
 ] as const;
 
 export const HUGO_SHORTCODE_TEMPLATE_METHODS = [
   ".Get",
+  ".Ref",
+  ".RelRef",
 ] as const;
 
 export const FRONT_MATTER_KEY_TYPES: Record<string, string[]> = {
