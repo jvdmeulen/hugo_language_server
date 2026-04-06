@@ -2,6 +2,7 @@
 import {
   CompletionTriggerKind,
   createConnection,
+  DidChangeWatchedFilesNotification,
   ProposedFeatures,
   TextDocumentSyncKind,
 } from "vscode-languageserver/node.js";
@@ -18,6 +19,10 @@ import {
   isTemplateFile,
   resolveProjectContext,
 } from "./project.js";
+import {
+  createWatchRegistrationOptions,
+  shouldRevalidateForWatchedChanges,
+} from "./watch.js";
 
 const connection = createConnection(
   ProposedFeatures.all,
@@ -26,8 +31,12 @@ const connection = createConnection(
 );
 const documents = new TextDocuments(TextDocument);
 let workspaceRoots: string[] = [];
+let supportsWatchedFilesRegistration = false;
 
 connection.onInitialize((params) => {
+  supportsWatchedFilesRegistration = Boolean(
+    params.capabilities.workspace?.didChangeWatchedFiles?.dynamicRegistration,
+  );
   workspaceRoots = [
     ...(params.workspaceFolders ?? []).flatMap((folder) =>
       folder.uri.startsWith("file://") ? [new URL(folder.uri)] : [],
@@ -49,6 +58,17 @@ connection.onInitialize((params) => {
       version: "0.1.0",
     },
   };
+});
+
+connection.onInitialized(async () => {
+  if (!supportsWatchedFilesRegistration || workspaceRoots.length === 0) {
+    return;
+  }
+
+  await connection.client.register(
+    DidChangeWatchedFilesNotification.type,
+    createWatchRegistrationOptions(workspaceRoots),
+  );
 });
 
 documents.onDidOpen((event) => {
@@ -112,6 +132,16 @@ connection.onHover((params) => {
     project,
     relativePath: filePath ? getRelativeProjectPath(filePath, project) : undefined,
   });
+});
+
+connection.onDidChangeWatchedFiles((params) => {
+  if (!shouldRevalidateForWatchedChanges(params)) {
+    return;
+  }
+
+  for (const document of documents.all()) {
+    validate(document);
+  }
 });
 
 function validate(document: TextDocument): void {
