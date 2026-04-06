@@ -4,12 +4,14 @@ import { HUGO_SHORTCODES } from "./constants.js";
 import type { CompletionContext, ParsedShortcode } from "./types.js";
 import { offsetAt, rangeFromOffsets } from "./utils.js";
 
-const SHORTCODE_SET = new Set(HUGO_SHORTCODES);
-
-export function analyzeShortcodes(text: string): {
+export function analyzeShortcodes(
+  text: string,
+  shortcodeNames: readonly string[] = HUGO_SHORTCODES,
+): {
   diagnostics: Diagnostic[];
   parsed: ParsedShortcode[];
 } {
+  const shortcodeSet = new Set(shortcodeNames);
   const diagnostics: Diagnostic[] = [];
   const parsed: ParsedShortcode[] = [];
   const stack: ParsedShortcode[] = [];
@@ -61,7 +63,7 @@ export function analyzeShortcodes(text: string): {
     };
     parsed.push(shortcode);
 
-    if (!SHORTCODE_SET.has(name as (typeof HUGO_SHORTCODES)[number])) {
+    if (!shortcodeSet.has(name)) {
       diagnostics.push({
         severity: DiagnosticSeverity.Warning,
         message: `Unknown Hugo shortcode "${name}".`,
@@ -98,6 +100,7 @@ function isLikelyPairedShortcode(body: string): boolean {
 export function shortcodeCompletion(
   text: string,
   position: { line: number; character: number },
+  shortcodeNames: readonly string[] = HUGO_SHORTCODES,
 ): CompletionContext | undefined {
   const cursorOffset = offsetAt(text, position);
   const beforeCursor = text.slice(0, cursorOffset);
@@ -108,7 +111,7 @@ export function shortcodeCompletion(
   }
 
   return {
-    items: HUGO_SHORTCODES.map((shortcode) => ({
+    items: shortcodeNames.map((shortcode) => ({
       label: shortcode,
       kind: CompletionItemKind.Function,
       insertText: shortcode,
