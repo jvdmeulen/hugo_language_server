@@ -171,3 +171,34 @@ test("shows hover for extended namespaced and page symbols", () => {
   assert.ok(ancestorsHover?.contents);
   assert.match((ancestorsHover?.contents as { value: string }).value, /template object.*`\.Ancestors`/i);
 });
+
+test("shows hover for shortcode template symbols", () => {
+  const getHoverResult = getHover('{{ .Get "title" }}', { line: 0, character: 5 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/shortcodes/callout.html",
+  });
+  const innerHoverResult = getHover("{{ .Inner }}", { line: 0, character: 5 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/shortcodes/callout.html",
+  });
+
+  assert.ok(getHoverResult?.contents);
+  assert.match((getHoverResult?.contents as { value: string }).value, /shortcode template method.*`\.Get`/i);
+  assert.match((getHoverResult?.contents as { value: string }).value, /parameter by index or by name/i);
+  assert.ok(innerHoverResult?.contents);
+  assert.match((innerHoverResult?.contents as { value: string }).value, /shortcode template object.*`\.Inner`/i);
+});

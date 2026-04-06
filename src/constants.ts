@@ -312,6 +312,21 @@ export const HUGO_TEMPLATE_METHODS = [
   ".Paginate.Pages",
 ] as const;
 
+export const HUGO_SHORTCODE_TEMPLATE_OBJECTS = [
+  ".Inner",
+  ".IsNamedParams",
+  ".Name",
+  ".Ordinal",
+  ".Page",
+  ".Parent",
+  ".Position",
+  ".Params",
+] as const;
+
+export const HUGO_SHORTCODE_TEMPLATE_METHODS = [
+  ".Get",
+] as const;
+
 export const FRONT_MATTER_KEY_TYPES: Record<string, string[]> = {
   title: ["string"],
   slug: ["string"],

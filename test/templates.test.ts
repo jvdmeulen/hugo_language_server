@@ -145,6 +145,24 @@ test("offers template object and method completions", () => {
   assert.ok(items.some((item) => item.label === ".Site"));
 });
 
+test("offers shortcode template symbol completions", () => {
+  const items = getCompletions("{{ .G", { line: 0, character: 5 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/shortcodes/callout.html",
+  });
+
+  assert.ok(items.some((item) => item.label === ".Get"));
+  assert.ok(items.some((item) => item.label === ".Inner"));
+  assert.ok(items.some((item) => item.label === ".IsNamedParams"));
+});
+
 test("computes relative project path for templates", () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-"));
   mkdirSync(join(workspaceRoot, "layouts", "_default"), { recursive: true });

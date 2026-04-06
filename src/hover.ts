@@ -4,6 +4,8 @@ import { FRONT_MATTER_KEY_TYPES } from "./constants.js";
 import {
   FRONT_MATTER_DOCS,
   EXTRA_TEMPLATE_SYMBOL_DOCS,
+  SHORTCODE_TEMPLATE_METHOD_DOCS,
+  SHORTCODE_TEMPLATE_OBJECT_DOCS,
   SHORTCODE_DOCS,
   TEMPLATE_FUNCTION_DOCS,
   TEMPLATE_KEYWORD_DOCS,
@@ -31,7 +33,7 @@ export function getHover(
   const isTemplate = Boolean(relativePath?.startsWith("layouts/") && relativePath.endsWith(".html"));
 
   if (isTemplate) {
-    return getTemplateHover(text, position, options?.project);
+    return getTemplateHover(text, position, options?.project, relativePath);
   }
 
   return getShortcodeHover(text, position, options?.project);
@@ -120,13 +122,14 @@ function getTemplateHover(
   text: string,
   position: Position,
   project?: ProjectContext,
+  relativePath?: string,
 ): Hover | null {
   const partialHover = getPartialHover(text, position, project);
   if (partialHover) {
     return partialHover;
   }
 
-  return getActionTokenHover(text, position);
+  return getActionTokenHover(text, position, relativePath);
 }
 
 function getPartialHover(
@@ -174,8 +177,13 @@ function markdown(parts: string[]): MarkupContent {
   };
 }
 
-function getActionTokenHover(text: string, position: Position): Hover | null {
+function getActionTokenHover(
+  text: string,
+  position: Position,
+  relativePath?: string,
+): Hover | null {
   const offset = offsetAt(text, position);
+  const isShortcodeTemplate = Boolean(relativePath?.startsWith("layouts/shortcodes/"));
 
   for (const action of text.matchAll(/{{-?[\s\S]*?}}/g)) {
     const raw = action[0];
@@ -227,6 +235,42 @@ function getActionTokenHover(text: string, position: Position): Hover | null {
               : "",
           ]),
         };
+      }
+
+      if (isShortcodeTemplate) {
+        const shortcodeMethodToken = findDocumentedPrefix(token, SHORTCODE_TEMPLATE_METHOD_DOCS);
+        if (shortcodeMethodToken) {
+          const shortcodeMethodDoc = SHORTCODE_TEMPLATE_METHOD_DOCS[shortcodeMethodToken];
+          const shortcodeMethodEnd = tokenStart + shortcodeMethodToken.length;
+          return {
+            range: rangeFromOffsets(text, tokenStart, shortcodeMethodEnd),
+            contents: markdown([
+              `**Hugo shortcode template method:** \`${shortcodeMethodToken}\``,
+              shortcodeMethodDoc.summary,
+              `Usage:\n\`\`\`gotmpl\n${shortcodeMethodDoc.usage}\n\`\`\``,
+              shortcodeMethodDoc.notes?.length
+                ? `Notes:\n${shortcodeMethodDoc.notes.map((note) => `- ${note}`).join("\n")}`
+                : "",
+            ]),
+          };
+        }
+
+        const shortcodeObjectToken = findDocumentedPrefix(token, SHORTCODE_TEMPLATE_OBJECT_DOCS);
+        if (shortcodeObjectToken) {
+          const shortcodeObjectDoc = SHORTCODE_TEMPLATE_OBJECT_DOCS[shortcodeObjectToken];
+          const shortcodeObjectEnd = tokenStart + shortcodeObjectToken.length;
+          return {
+            range: rangeFromOffsets(text, tokenStart, shortcodeObjectEnd),
+            contents: markdown([
+              `**Hugo shortcode template object:** \`${shortcodeObjectToken}\``,
+              shortcodeObjectDoc.summary,
+              `Usage:\n\`\`\`gotmpl\n${shortcodeObjectDoc.usage}\n\`\`\``,
+              shortcodeObjectDoc.notes?.length
+                ? `Notes:\n${shortcodeObjectDoc.notes.map((note) => `- ${note}`).join("\n")}`
+                : "",
+            ]),
+          };
+        }
       }
 
       const extraDoc = EXTRA_TEMPLATE_SYMBOL_DOCS[token];

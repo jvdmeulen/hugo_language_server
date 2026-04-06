@@ -47,6 +47,7 @@ export function getCompletions(
   if (isTemplate) {
     return templateCompletion(text, position, {
       partialNames: options?.project?.partialNames ?? [],
+      relativePath,
     }) ?? [];
   }
 

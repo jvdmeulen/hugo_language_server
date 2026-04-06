@@ -1330,3 +1330,56 @@ export const EXTRA_TEMPLATE_SYMBOL_DOCS: Record<
     usage: "{{ reflect.IsString .Title }}",
   },
 };
+
+export const SHORTCODE_TEMPLATE_OBJECT_DOCS: Record<
+  string,
+  { summary: string; usage: string; notes?: string[] }
+> = {
+  ".Inner": {
+    summary: "Inner content passed to a paired shortcode.",
+    usage: "{{ .Inner }}",
+    notes: ["Available when the shortcode wraps content instead of being self-closing."],
+  },
+  ".IsNamedParams": {
+    summary: "Boolean indicating whether the shortcode was called with named parameters.",
+    usage: "{{ if .IsNamedParams }}...{{ end }}",
+  },
+  ".Name": {
+    summary: "Name of the current shortcode.",
+    usage: "{{ .Name }}",
+  },
+  ".Ordinal": {
+    summary: "Zero-based ordinal index of this shortcode occurrence on the page.",
+    usage: "{{ .Ordinal }}",
+  },
+  ".Page": {
+    summary: "The page that rendered the current shortcode.",
+    usage: "{{ .Page.Title }}",
+  },
+  ".Parent": {
+    summary: "Parent shortcode context when this shortcode is nested.",
+    usage: "{{ with .Parent }}{{ .Name }}{{ end }}",
+  },
+  ".Position": {
+    summary: "Source position of the shortcode in the content file.",
+    usage: "{{ .Position }}",
+  },
+  ".Params": {
+    summary: "All shortcode parameters as a collection or map-like structure.",
+    usage: "{{ .Params }}",
+  },
+};
+
+export const SHORTCODE_TEMPLATE_METHOD_DOCS: Record<
+  string,
+  { summary: string; usage: string; notes?: string[] }
+> = {
+  ".Get": {
+    summary: "Returns a shortcode parameter by index or by name.",
+    usage: '{{ .Get 0 }}\n{{ .Get "title" }}',
+    notes: [
+      "Use numeric indexes for positional params and strings for named params.",
+      "Most commonly used inside `layouts/shortcodes/*.html`.",
+    ],
+  },
+};

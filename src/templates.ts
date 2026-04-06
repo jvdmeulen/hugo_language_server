@@ -8,6 +8,8 @@ import {
 } from "vscode-languageserver";
 
 import {
+  HUGO_SHORTCODE_TEMPLATE_METHODS,
+  HUGO_SHORTCODE_TEMPLATE_OBJECTS,
   HUGO_TEMPLATE_BLOCK_KEYWORDS,
   HUGO_TEMPLATE_FUNCTIONS,
   HUGO_TEMPLATE_METHODS,
@@ -37,6 +39,7 @@ export function templateCompletion(
   position: Position,
   options: {
     partialNames: string[];
+    relativePath?: string;
   },
 ): CompletionItem[] | undefined {
   const beforeCursor = text.slice(0, offsetAt(text, position));
@@ -85,7 +88,32 @@ export function templateCompletion(
     detail: "Hugo template method",
   }));
 
-  return [...keywordItems, ...functionItems, ...objectItems, ...methodItems];
+  const shortcodeObjectItems = options.relativePath?.startsWith("layouts/shortcodes/")
+    ? HUGO_SHORTCODE_TEMPLATE_OBJECTS.map((item) => ({
+        label: item,
+        kind: CompletionItemKind.Variable,
+        insertText: item,
+        detail: "Hugo shortcode template object",
+      }))
+    : [];
+
+  const shortcodeMethodItems = options.relativePath?.startsWith("layouts/shortcodes/")
+    ? HUGO_SHORTCODE_TEMPLATE_METHODS.map((item) => ({
+        label: item,
+        kind: CompletionItemKind.Method,
+        insertText: item,
+        detail: "Hugo shortcode template method",
+      }))
+    : [];
+
+  return [
+    ...keywordItems,
+    ...functionItems,
+    ...objectItems,
+    ...methodItems,
+    ...shortcodeObjectItems,
+    ...shortcodeMethodItems,
+  ];
 }
 
 function validateTemplateDelimiters(text: string): Diagnostic[] {
