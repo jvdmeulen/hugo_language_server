@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import TOML from "@iarna/toml";
 import { parseDocument } from "yaml";
@@ -81,6 +81,19 @@ export function getRelativeProjectPath(filePath: string, context: ProjectContext
   return relative(context.hugoRoot, filePath);
 }
 
+export function findNamedEntryPath(
+  hugoRoot: string,
+  kind: "partials" | "shortcodes",
+  name: string,
+): string | undefined {
+  const directory = join(hugoRoot, "layouts", kind);
+  if (!existsSync(directory)) {
+    return undefined;
+  }
+
+  return findEntryByName(directory, normalizeEntryName(name));
+}
+
 function getKnownEntries(directory: string): string[] {
   if (!existsSync(directory)) {
     return [];
@@ -116,6 +129,41 @@ function collectEntries(directory: string, names: Set<string>, prefix = ""): voi
 
     names.add(prefix ? `${prefix}/${baseName}` : baseName);
   }
+}
+
+function findEntryByName(directory: string, name: string, prefix = ""): string | undefined {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      const nested = findEntryByName(
+        fullPath,
+        name,
+        prefix ? `${prefix}/${entry.name}` : entry.name,
+      );
+      if (nested) {
+        return nested;
+      }
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const extension = extname(entry.name);
+    if (!extension) {
+      continue;
+    }
+
+    const baseName = entry.name.slice(0, -extension.length);
+    const candidate = normalizeEntryName(prefix ? `${prefix}/${baseName}` : baseName);
+    if (candidate === name) {
+      return fullPath;
+    }
+  }
+
+  return undefined;
 }
 
 function detectHugoRoot(startDirectory: string): string | undefined {
@@ -281,4 +329,8 @@ function normalizePath(path: string): string {
 
 export function filePathFromUri(uri: string): string | undefined {
   return uriToFilePath(uri);
+}
+
+function normalizeEntryName(name: string): string {
+  return name.replace(/\.html$/, "");
 }

@@ -9,6 +9,7 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import { TextDocuments } from "vscode-languageserver";
 
 import { analyzeDocument, getCompletions } from "./analysis.js";
+import { getDefinition } from "./definitions.js";
 import {
   filePathFromUri,
   getRelativeProjectPath,
@@ -36,6 +37,7 @@ connection.onInitialize((params) => {
   return {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
+      definitionProvider: true,
       completionProvider: {
         triggerCharacters: [":", " ", "<", "%", "/"],
       },
@@ -76,6 +78,21 @@ connection.onCompletion((params) => {
   }
 
   return [];
+});
+
+connection.onDefinition((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return [];
+  }
+
+  const filePath = filePathFromUri(document.uri);
+  const project = resolveProjectContext(document.uri, workspaceRoots);
+
+  return getDefinition(document.getText(), params.position, {
+    project,
+    relativePath: filePath ? getRelativeProjectPath(filePath, project) : undefined,
+  });
 });
 
 function validate(document: TextDocument): void {
