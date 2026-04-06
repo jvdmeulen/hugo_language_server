@@ -10,6 +10,7 @@ import { TextDocuments } from "vscode-languageserver";
 
 import { analyzeDocument, getCompletions } from "./analysis.js";
 import { getDefinition } from "./definitions.js";
+import { getHover } from "./hover.js";
 import {
   filePathFromUri,
   getRelativeProjectPath,
@@ -38,6 +39,7 @@ connection.onInitialize((params) => {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       definitionProvider: true,
+      hoverProvider: true,
       completionProvider: {
         triggerCharacters: [":", " ", "<", "%", "/"],
       },
@@ -92,6 +94,21 @@ connection.onDefinition((params) => {
   const project = resolveProjectContext(document.uri, workspaceRoots);
 
   return getDefinition(document.getText(), params.position, {
+    project,
+    relativePath: filePath ? getRelativeProjectPath(filePath, project) : undefined,
+  });
+});
+
+connection.onHover((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return null;
+  }
+
+  const filePath = filePathFromUri(document.uri);
+  const project = resolveProjectContext(document.uri, workspaceRoots);
+
+  return getHover(document.getText(), params.position, {
     project,
     relativePath: filePath ? getRelativeProjectPath(filePath, project) : undefined,
   });

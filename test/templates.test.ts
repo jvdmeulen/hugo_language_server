@@ -127,6 +127,24 @@ test("offers template keyword completions in actions", () => {
   assert.ok(items.some((item) => item.label === "printf"));
 });
 
+test("offers template object and method completions", () => {
+  const items = getCompletions("{{ .Sc", { line: 0, character: 6 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/baseof.html",
+  });
+
+  assert.ok(items.some((item) => item.label === ".Scratch"));
+  assert.ok(items.some((item) => item.label === ".Scratch.Get"));
+  assert.ok(items.some((item) => item.label === ".Site"));
+});
+
 test("computes relative project path for templates", () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-"));
   mkdirSync(join(workspaceRoot, "layouts", "_default"), { recursive: true });

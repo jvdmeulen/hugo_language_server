@@ -10,6 +10,8 @@ import {
 import {
   HUGO_TEMPLATE_BLOCK_KEYWORDS,
   HUGO_TEMPLATE_FUNCTIONS,
+  HUGO_TEMPLATE_METHODS,
+  HUGO_TEMPLATE_OBJECTS,
 } from "./constants.js";
 import { offsetAt } from "./utils.js";
 import { rangeFromOffsets } from "./utils.js";
@@ -49,7 +51,7 @@ export function templateCompletion(
     }));
   }
 
-  const actionMatch = /{{-?\s*([A-Za-z.]*)$/.exec(beforeCursor);
+  const actionMatch = /{{-?[\s\S]*?\b([A-Za-z.]*)$/.exec(beforeCursor);
   if (!actionMatch) {
     return undefined;
   }
@@ -69,7 +71,21 @@ export function templateCompletion(
     detail: "Hugo template function",
   }));
 
-  return [...keywordItems, ...functionItems];
+  const objectItems = HUGO_TEMPLATE_OBJECTS.map((item) => ({
+    label: item,
+    kind: CompletionItemKind.Variable,
+    insertText: item,
+    detail: "Hugo template object",
+  }));
+
+  const methodItems = HUGO_TEMPLATE_METHODS.map((item) => ({
+    label: item,
+    kind: CompletionItemKind.Method,
+    insertText: item,
+    detail: "Hugo template method",
+  }));
+
+  return [...keywordItems, ...functionItems, ...objectItems, ...methodItems];
 }
 
 function validateTemplateDelimiters(text: string): Diagnostic[] {
