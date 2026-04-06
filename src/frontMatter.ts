@@ -139,7 +139,9 @@ function validateKnownKeys(
     }
 
     const acceptedTypes = FRONT_MATTER_KEY_TYPES[key];
-    if (acceptedTypes && !acceptedTypes.includes(valueType(value))) {
+    const contextualDiagnostics = validateContextualFrontMatter(key, value, keyRange);
+
+    if (acceptedTypes && !acceptedTypes.includes(valueType(value)) && contextualDiagnostics.length === 0) {
       diagnostics.push({
         severity: DiagnosticSeverity.Warning,
         message: `Front matter key "${key}" expects ${acceptedTypes.join(" or ")}.`,
@@ -147,6 +149,8 @@ function validateKnownKeys(
         source: "hugo-lsp",
       });
     }
+
+    diagnostics.push(...contextualDiagnostics);
   }
 
   return diagnostics;
@@ -185,4 +189,126 @@ function findKeyRange(
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function validateContextualFrontMatter(
+  key: string,
+  value: unknown,
+  range: ReturnType<typeof rangeFromOffsets>,
+): Diagnostic[] {
+  switch (key) {
+    case "date":
+    case "lastmod":
+    case "publishDate":
+    case "expiryDate":
+      return validateDateLikeKey(key, value, range);
+    case "aliases":
+      return validateAliases(value, range);
+    case "resources":
+      return validateResources(value, range);
+    case "cascade":
+      return validateCascade(value, range);
+    case "draft":
+    case "headless":
+      return validateBooleanKey(key, value, range);
+    default:
+      return [];
+  }
+}
+
+function validateDateLikeKey(
+  key: string,
+  value: unknown,
+  range: ReturnType<typeof rangeFromOffsets>,
+): Diagnostic[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  if (!isLikelyDate(value)) {
+    return [
+      {
+        severity: DiagnosticSeverity.Warning,
+        message: `Front matter key "${key}" should be a valid date or datetime string.`,
+        range,
+        source: "hugo-lsp",
+      },
+    ];
+  }
+
+  return [];
+}
+
+function validateAliases(value: unknown, range: ReturnType<typeof rangeFromOffsets>): Diagnostic[] {
+  if (typeof value === "string") {
+    return value.startsWith("/") ? [] : [warning('Front matter key "aliases" should use site-relative paths starting with "/".', range)];
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const invalid = value.some((entry) => typeof entry !== "string" || !entry.startsWith("/"));
+  return invalid ? [warning('Front matter key "aliases" should be an array of site-relative path strings.', range)] : [];
+}
+
+function validateResources(value: unknown, range: ReturnType<typeof rangeFromOffsets>): Diagnostic[] {
+  if (!Array.isArray(value)) {
+    return typeof value === "object" && value !== null
+      ? []
+      : [warning('Front matter key "resources" should be an array or object.', range)];
+  }
+
+  const invalid = value.some(
+    (entry) => !entry || typeof entry !== "object" || Array.isArray(entry) || !("src" in (entry as Record<string, unknown>)),
+  );
+
+  return invalid
+    ? [warning('Front matter key "resources" entries should be objects with at least a "src" field.', range)]
+    : [];
+}
+
+function validateCascade(value: unknown, range: ReturnType<typeof rangeFromOffsets>): Diagnostic[] {
+  if (Array.isArray(value)) {
+    const invalid = value.some((entry) => !entry || typeof entry !== "object" || Array.isArray(entry));
+    return invalid ? [warning('Front matter key "cascade" should contain only objects.', range)] : [];
+  }
+
+  if (value && typeof value === "object") {
+    return [];
+  }
+
+  return [warning('Front matter key "cascade" should be an object or array of objects.', range)];
+}
+
+function validateBooleanKey(
+  key: string,
+  value: unknown,
+  range: ReturnType<typeof rangeFromOffsets>,
+): Diagnostic[] {
+  return typeof value === "boolean"
+    ? []
+    : [warning(`Front matter key "${key}" should be a boolean.`, range)];
+}
+
+function isLikelyDate(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})?)?$/.test(normalized)) {
+    return !Number.isNaN(Date.parse(normalized));
+  }
+
+  return !Number.isNaN(Date.parse(normalized));
+}
+
+function warning(message: string, range: ReturnType<typeof rangeFromOffsets>): Diagnostic {
+  return {
+    severity: DiagnosticSeverity.Warning,
+    message,
+    range,
+    source: "hugo-lsp",
+  };
 }

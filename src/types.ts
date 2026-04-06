@@ -38,3 +38,12 @@ export interface CompletionRequestContext {
   text: string;
   position: Position;
 }
+
+export interface ProjectContext {
+  workspaceRoot?: string;
+  hugoRoot?: string;
+  isHugoProject: boolean;
+  contentRoots: string[];
+  shortcodeNames: string[];
+  partialNames: string[];
+}

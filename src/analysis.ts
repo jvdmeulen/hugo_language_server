@@ -3,16 +3,30 @@ import type { CompletionItem, Diagnostic, Position } from "vscode-languageserver
 import { frontMatterCompletions } from "./completions.js";
 import { analyzeFrontMatter } from "./frontMatter.js";
 import { HUGO_SHORTCODES } from "./constants.js";
-import { getKnownShortcodes } from "./project.js";
+import type { ProjectContext } from "./types.js";
 import { analyzeShortcodes, shortcodeCompletion } from "./shortcodes.js";
+import { analyzeTemplate } from "./templates.js";
 
 export function analyzeDocument(
   text: string,
-  options?: { workspaceRoot?: string },
+  options?: { project?: ProjectContext; relativePath?: string },
 ): {
   diagnostics: Diagnostic[];
 } {
-  const shortcodeNames = getShortcodeNames(options?.workspaceRoot);
+  const shortcodeNames = getShortcodeNames(options?.project);
+  const relativePath = options?.relativePath;
+  const isTemplate = Boolean(relativePath?.startsWith("layouts/") && relativePath.endsWith(".html"));
+
+  if (isTemplate) {
+    return {
+      diagnostics: analyzeTemplate(text, {
+        partialNames: options?.project?.partialNames ?? [],
+        shortcodeNames,
+        relativePath,
+      }),
+    };
+  }
+
   const frontMatter = analyzeFrontMatter(text);
   const shortcodes = analyzeShortcodes(text, shortcodeNames);
 
@@ -24,9 +38,9 @@ export function analyzeDocument(
 export function getCompletions(
   text: string,
   position: Position,
-  options?: { workspaceRoot?: string },
+  options?: { project?: ProjectContext },
 ): CompletionItem[] {
-  const shortcodeNames = getShortcodeNames(options?.workspaceRoot);
+  const shortcodeNames = getShortcodeNames(options?.project);
   const frontMatter = analyzeFrontMatter(text);
   const frontMatterItems = frontMatterCompletions(frontMatter.block, position);
   if (frontMatterItems) {
@@ -36,6 +50,6 @@ export function getCompletions(
   return shortcodeCompletion(text, position, shortcodeNames)?.items ?? [];
 }
 
-function getShortcodeNames(workspaceRoot?: string): string[] {
-  return [...new Set([...HUGO_SHORTCODES, ...getKnownShortcodes(workspaceRoot)])];
+function getShortcodeNames(project?: ProjectContext): string[] {
+  return [...new Set([...HUGO_SHORTCODES, ...(project?.shortcodeNames ?? [])])];
 }

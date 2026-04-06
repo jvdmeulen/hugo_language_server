@@ -35,7 +35,16 @@ test("accepts project shortcode from layouts/shortcodes", () => {
   mkdirSync(join(workspaceRoot, "layouts", "shortcodes"), { recursive: true });
   writeFileSync(join(workspaceRoot, "layouts", "shortcodes", "callout.html"), "<div></div>");
 
-  const diagnostics = analyzeDocument("{{< callout >}}", { workspaceRoot }).diagnostics;
+  const diagnostics = analyzeDocument("{{< callout >}}", {
+    project: {
+      workspaceRoot,
+      hugoRoot: workspaceRoot,
+      isHugoProject: true,
+      contentRoots: [join(workspaceRoot, "content")],
+      shortcodeNames: ["callout"],
+      partialNames: [],
+    },
+  }).diagnostics;
   assert.equal(diagnostics.length, 0);
 });
 
@@ -44,6 +53,15 @@ test("offers completion for project shortcode", () => {
   mkdirSync(join(workspaceRoot, "layouts", "shortcodes"), { recursive: true });
   writeFileSync(join(workspaceRoot, "layouts", "shortcodes", "gallery.html"), "<div></div>");
 
-  const items = getCompletions("{{< ga", { line: 0, character: 6 }, { workspaceRoot });
+  const items = getCompletions("{{< ga", { line: 0, character: 6 }, {
+    project: {
+      workspaceRoot,
+      hugoRoot: workspaceRoot,
+      isHugoProject: true,
+      contentRoots: [join(workspaceRoot, "content")],
+      shortcodeNames: ["gallery"],
+      partialNames: [],
+    },
+  });
   assert.ok(items.some((item) => item.label === "gallery"));
 });

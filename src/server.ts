@@ -9,7 +9,13 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import { TextDocuments } from "vscode-languageserver";
 
 import { analyzeDocument, getCompletions } from "./analysis.js";
-import { resolveWorkspaceRoot } from "./project.js";
+import {
+  filePathFromUri,
+  getRelativeProjectPath,
+  isContentFile,
+  isTemplateFile,
+  resolveProjectContext,
+} from "./project.js";
 
 const connection = createConnection(
   ProposedFeatures.all,
@@ -58,13 +64,14 @@ connection.onCompletion((params) => {
   if (!document) {
     return [];
   }
+  const project = resolveProjectContext(document.uri, workspaceRoots);
 
   if (
     params.context?.triggerKind === CompletionTriggerKind.TriggerCharacter ||
     params.context?.triggerKind === CompletionTriggerKind.Invoked
   ) {
     return getCompletions(document.getText(), params.position, {
-      workspaceRoot: resolveWorkspaceRoot(document.uri, workspaceRoots),
+      project,
     });
   }
 
@@ -72,14 +79,27 @@ connection.onCompletion((params) => {
 });
 
 function validate(document: TextDocument): void {
-  if (document.languageId !== "markdown" && !document.uri.endsWith(".md")) {
+  const filePath = filePathFromUri(document.uri);
+  if (!filePath) {
+    return;
+  }
+  const project = resolveProjectContext(document.uri, workspaceRoots);
+  const isMarkdown = document.languageId === "markdown" || document.uri.endsWith(".md");
+  const isTemplate = document.languageId === "html" || isTemplateFile(filePath, project);
+
+  if (!(isMarkdown || isTemplate)) {
+    return;
+  }
+
+  if (isMarkdown && !isContentFile(filePath, project)) {
     return;
   }
 
   connection.sendDiagnostics({
     uri: document.uri,
     diagnostics: analyzeDocument(document.getText(), {
-      workspaceRoot: resolveWorkspaceRoot(document.uri, workspaceRoots),
+      project,
+      relativePath: getRelativeProjectPath(filePath, project),
     }).diagnostics,
   });
 }

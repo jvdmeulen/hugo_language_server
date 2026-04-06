@@ -44,3 +44,65 @@ draft = nope
   const diagnostics = analyzeDocument(text).diagnostics;
   assert.ok(diagnostics.some((diagnostic) => /Invalid|Unexpected/i.test(diagnostic.message)));
 });
+
+test("reports invalid date-like front matter values", () => {
+  const text = `---
+title: Hello
+date: not-a-date
+---
+Body`;
+
+  const diagnostics = analyzeDocument(text).diagnostics;
+  assert.ok(
+    diagnostics.some((diagnostic) =>
+      /should be a valid date or datetime string/.test(diagnostic.message),
+    ),
+  );
+});
+
+test("reports invalid aliases structure", () => {
+  const text = `---
+title: Hello
+aliases:
+  - invalid/path
+---
+Body`;
+
+  const diagnostics = analyzeDocument(text).diagnostics;
+  assert.ok(
+    diagnostics.some((diagnostic) =>
+      /aliases.*site-relative/.test(diagnostic.message),
+    ),
+  );
+});
+
+test("reports invalid resources structure", () => {
+  const text = `---
+title: Hello
+resources:
+  - name: hero
+---
+Body`;
+
+  const diagnostics = analyzeDocument(text).diagnostics;
+  assert.ok(
+    diagnostics.some((diagnostic) =>
+      /resources.*src/.test(diagnostic.message),
+    ),
+  );
+});
+
+test("reports invalid cascade structure", () => {
+  const text = `---
+title: Hello
+cascade: wrong
+---
+Body`;
+
+  const diagnostics = analyzeDocument(text).diagnostics;
+  assert.ok(
+    diagnostics.some((diagnostic) =>
+      /cascade.*object or array of objects/.test(diagnostic.message),
+    ),
+  );
+});
