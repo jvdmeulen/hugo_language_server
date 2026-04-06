@@ -1,0 +1,31 @@
+{
+  "name": "hugo-language-server",
+  "version": "0.1.0",
+  "description": "A Hugo-focused language server for Markdown content in Neovim.",
+  "type": "module",
+  "bin": {
+    "hugo-language-server": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/test/**/*.test.js"
+  },
+  "keywords": [
+    "hugo",
+    "lsp",
+    "neovim",
+    "typescript"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "typescript": "^5.9.3"
+  }
+}
