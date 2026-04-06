@@ -5,7 +5,7 @@ import { analyzeFrontMatter } from "./frontMatter.js";
 import { HUGO_SHORTCODES } from "./constants.js";
 import type { ProjectContext } from "./types.js";
 import { analyzeShortcodes, shortcodeCompletion } from "./shortcodes.js";
-import { analyzeTemplate } from "./templates.js";
+import { analyzeTemplate, templateCompletion } from "./templates.js";
 
 export function analyzeDocument(
   text: string,
@@ -38,9 +38,18 @@ export function analyzeDocument(
 export function getCompletions(
   text: string,
   position: Position,
-  options?: { project?: ProjectContext },
+  options?: { project?: ProjectContext; relativePath?: string },
 ): CompletionItem[] {
   const shortcodeNames = getShortcodeNames(options?.project);
+  const relativePath = options?.relativePath;
+  const isTemplate = Boolean(relativePath?.startsWith("layouts/") && relativePath.endsWith(".html"));
+
+  if (isTemplate) {
+    return templateCompletion(text, position, {
+      partialNames: options?.project?.partialNames ?? [],
+    }) ?? [];
+  }
+
   const frontMatter = analyzeFrontMatter(text);
   const frontMatterItems = frontMatterCompletions(frontMatter.block, position);
   if (frontMatterItems) {

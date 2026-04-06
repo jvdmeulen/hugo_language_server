@@ -37,6 +37,38 @@ export const HUGO_SHORTCODES = [
   "youtube",
 ] as const;
 
+export const HUGO_TEMPLATE_BLOCK_KEYWORDS = [
+  "if",
+  "else",
+  "with",
+  "range",
+  "define",
+  "block",
+  "template",
+  "partial",
+  "partialCached",
+  "end",
+] as const;
+
+export const HUGO_TEMPLATE_FUNCTIONS = [
+  "dict",
+  "slice",
+  "printf",
+  "index",
+  "len",
+  "default",
+  "safeHTML",
+  "safeURL",
+  "markdownify",
+  "plainify",
+  "delimit",
+  "where",
+  "sort",
+  "first",
+  "after",
+  "urls.Parse",
+] as const;
+
 export const FRONT_MATTER_KEY_TYPES: Record<string, string[]> = {
   title: ["string"],
   slug: ["string"],

@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { analyzeDocument } from "../src/analysis.js";
+import { analyzeDocument, getCompletions } from "../src/analysis.js";
 import { resolveProjectContext, getRelativeProjectPath } from "../src/project.js";
 
 test("detects Hugo root and custom contentDir", () => {
@@ -72,6 +72,59 @@ test("reports unknown partials in templates", () => {
       /Unknown Hugo partial "missing\/sidebar"/.test(diagnostic.message),
     ),
   );
+});
+
+test("reports missing template end blocks", () => {
+  const diagnostics = analyzeDocument('{{ if .Title }}<h1>{{ .Title }}</h1>', {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/single.html",
+  }).diagnostics;
+
+  assert.ok(
+    diagnostics.some((diagnostic) =>
+      /missing a matching "end"/.test(diagnostic.message),
+    ),
+  );
+});
+
+test("offers partial completions inside partial calls", () => {
+  const items = getCompletions('{{ partial "sh', { line: 0, character: 13 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: ["shared/hero", "footer"],
+    },
+    relativePath: "layouts/_default/baseof.html",
+  });
+
+  assert.ok(items.some((item) => item.label === "shared/hero"));
+});
+
+test("offers template keyword completions in actions", () => {
+  const items = getCompletions("{{ ra", { line: 0, character: 5 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/baseof.html",
+  });
+
+  assert.ok(items.some((item) => item.label === "range"));
+  assert.ok(items.some((item) => item.label === "printf"));
 });
 
 test("computes relative project path for templates", () => {

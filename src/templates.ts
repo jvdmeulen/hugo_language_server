@@ -1,5 +1,17 @@
-import { DiagnosticSeverity, type Diagnostic } from "vscode-languageserver";
+import {
+  CompletionItemKind,
+  InsertTextFormat,
+  DiagnosticSeverity,
+  type CompletionItem,
+  type Diagnostic,
+  type Position,
+} from "vscode-languageserver";
 
+import {
+  HUGO_TEMPLATE_BLOCK_KEYWORDS,
+  HUGO_TEMPLATE_FUNCTIONS,
+} from "./constants.js";
+import { offsetAt } from "./utils.js";
 import { rangeFromOffsets } from "./utils.js";
 
 export function analyzeTemplate(
@@ -12,9 +24,52 @@ export function analyzeTemplate(
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   diagnostics.push(...validateTemplateDelimiters(text));
+  diagnostics.push(...validateTemplateBlocks(text));
   diagnostics.push(...validatePartials(text, options.partialNames));
   diagnostics.push(...validateShortcodeReferences(text, options.shortcodeNames, options.relativePath));
   return diagnostics;
+}
+
+export function templateCompletion(
+  text: string,
+  position: Position,
+  options: {
+    partialNames: string[];
+  },
+): CompletionItem[] | undefined {
+  const beforeCursor = text.slice(0, offsetAt(text, position));
+
+  const partialMatch = /{{-?\s*partial(?:Cached)?\s+"([^"]*)$/.exec(beforeCursor);
+  if (partialMatch) {
+    return options.partialNames.map((partial) => ({
+      label: partial,
+      kind: CompletionItemKind.File,
+      insertText: partial,
+      detail: "Hugo partial",
+    }));
+  }
+
+  const actionMatch = /{{-?\s*([A-Za-z.]*)$/.exec(beforeCursor);
+  if (!actionMatch) {
+    return undefined;
+  }
+
+  const keywordItems = HUGO_TEMPLATE_BLOCK_KEYWORDS.map((keyword) => ({
+    label: keyword,
+    kind: CompletionItemKind.Keyword,
+    insertText: keywordSnippet(keyword),
+    insertTextFormat: InsertTextFormat.Snippet,
+    detail: "Hugo template keyword",
+  }));
+
+  const functionItems = HUGO_TEMPLATE_FUNCTIONS.map((fn) => ({
+    label: fn,
+    kind: CompletionItemKind.Function,
+    insertText: fn,
+    detail: "Hugo template function",
+  }));
+
+  return [...keywordItems, ...functionItems];
 }
 
 function validateTemplateDelimiters(text: string): Diagnostic[] {
@@ -48,6 +103,58 @@ function validateTemplateDelimiters(text: string): Diagnostic[] {
       severity: DiagnosticSeverity.Error,
       message: 'Opening "{{" has no matching "}}".',
       range: rangeFromOffsets(text, openIndex, openIndex + 2),
+      source: "hugo-lsp",
+    });
+  }
+
+  return diagnostics;
+}
+
+function validateTemplateBlocks(text: string): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  const stack: Array<{ keyword: string; index: number }> = [];
+  const regex = /{{-?\s*([A-Za-z]+)\b[\s\S]*?}}/g;
+  const openingKeywords = new Set(["if", "with", "range", "define", "block"]);
+
+  for (const match of text.matchAll(regex)) {
+    const keyword = match[1] ?? "";
+    const index = match.index ?? 0;
+
+    if (openingKeywords.has(keyword)) {
+      stack.push({ keyword, index });
+      continue;
+    }
+
+    if (keyword === "else") {
+      if (stack.length === 0 || !["if", "with", "range"].includes(stack[stack.length - 1]?.keyword ?? "")) {
+        diagnostics.push({
+          severity: DiagnosticSeverity.Error,
+          message: 'Template keyword "else" does not match an open block.',
+          range: rangeFromOffsets(text, index, index + match[0].length),
+          source: "hugo-lsp",
+        });
+      }
+      continue;
+    }
+
+    if (keyword === "end") {
+      const open = stack.pop();
+      if (!open) {
+        diagnostics.push({
+          severity: DiagnosticSeverity.Error,
+          message: 'Template keyword "end" does not match an open block.',
+          range: rangeFromOffsets(text, index, index + match[0].length),
+          source: "hugo-lsp",
+        });
+      }
+    }
+  }
+
+  for (const open of stack) {
+    diagnostics.push({
+      severity: DiagnosticSeverity.Error,
+      message: `Template block "${open.keyword}" is missing a matching "end".`,
+      range: rangeFromOffsets(text, open.index, open.index + 2),
       source: "hugo-lsp",
     });
   }
@@ -111,4 +218,28 @@ function validateShortcodeReferences(
 
 function normalizeTemplateLookup(name: string): string {
   return name.replace(/\.html$/, "");
+}
+
+function keywordSnippet(keyword: string): string {
+  if (keyword === "end" || keyword === "else") {
+    return keyword;
+  }
+
+  if (keyword === "partial") {
+    return 'partial "$1" .';
+  }
+
+  if (keyword === "partialCached") {
+    return 'partialCached "$1" .';
+  }
+
+  if (keyword === "template") {
+    return 'template "$1" .';
+  }
+
+  if (keyword === "define" || keyword === "block") {
+    return `${keyword} "$1" }}$0{{ end`;
+  }
+
+  return `${keyword} $1 }}$0{{ end`;
 }

@@ -72,8 +72,10 @@ connection.onCompletion((params) => {
     params.context?.triggerKind === CompletionTriggerKind.TriggerCharacter ||
     params.context?.triggerKind === CompletionTriggerKind.Invoked
   ) {
+    const filePath = filePathFromUri(document.uri);
     return getCompletions(document.getText(), params.position, {
       project,
+      relativePath: filePath ? getRelativeProjectPath(filePath, project) : undefined,
     });
   }
 
