@@ -31,6 +31,7 @@ export function analyzeTemplate(
   diagnostics.push(...validateTemplateDelimiters(text));
   diagnostics.push(...validateTemplateBlocks(text));
   diagnostics.push(...validateUnusedTemplateVariables(text));
+  diagnostics.push(...validateUndefinedTemplateVariables(text));
   diagnostics.push(...validatePartials(text, options.partialNames));
   diagnostics.push(...validateShortcodeReferences(text, options.shortcodeNames, options.relativePath));
   return diagnostics;
@@ -329,9 +330,28 @@ function collectTemplateVariableDeclarations(text: string): Array<{ name: string
     const actionStart = action.index ?? 0;
     const raw = action[0];
 
-    for (const match of raw.matchAll(/(\$[A-Za-z_][A-Za-z0-9_]*)\s*:=/g)) {
-      const name = match[1] ?? "";
-      const start = actionStart + (match.index ?? 0);
+    for (const match of raw.matchAll(/(?:range|with)\s+(\$[A-Za-z_][A-Za-z0-9_]*)\s*,\s*(\$[A-Za-z_][A-Za-z0-9_]*)\s*:=/g)) {
+      const firstName = match[1] ?? "";
+      const secondName = match[2] ?? "";
+      const matchStart = actionStart + (match.index ?? 0);
+      const firstStart = matchStart + match[0].indexOf(firstName);
+      const secondStart = matchStart + match[0].indexOf(secondName);
+
+      declarations.push({
+        name: firstName,
+        start: firstStart,
+        end: firstStart + firstName.length,
+      });
+      declarations.push({
+        name: secondName,
+        start: secondStart,
+        end: secondStart + secondName.length,
+      });
+    }
+
+    for (const match of raw.matchAll(/(^|[^\w$,])(\$[A-Za-z_][A-Za-z0-9_]*)\s*:=/g)) {
+      const name = match[2] ?? "";
+      const start = actionStart + (match.index ?? 0) + (match[1]?.length ?? 0);
       declarations.push({
         name,
         start,
@@ -345,6 +365,49 @@ function collectTemplateVariableDeclarations(text: string): Array<{ name: string
 
 function countTemplateVariableReferences(text: string, name: string): number {
   return [...text.matchAll(new RegExp(`${escapeRegExp(name)}\\b`, "g"))].length;
+}
+
+function validateUndefinedTemplateVariables(text: string): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  const declared = new Set(collectTemplateVariableDeclarations(text).map((declaration) => declaration.name));
+  const reported = new Set<string>();
+
+  for (const reference of collectTemplateVariableReferences(text)) {
+    if (reference.name === "$" || declared.has(reference.name) || reported.has(reference.name)) {
+      continue;
+    }
+
+    reported.add(reference.name);
+    diagnostics.push({
+      severity: DiagnosticSeverity.Warning,
+      message: `Template variable "${reference.name}" is used but not defined in this template.`,
+      range: rangeFromOffsets(text, reference.start, reference.end),
+      source: "hugo-lsp",
+    });
+  }
+
+  return diagnostics;
+}
+
+function collectTemplateVariableReferences(text: string): Array<{ name: string; start: number; end: number }> {
+  const references: Array<{ name: string; start: number; end: number }> = [];
+
+  for (const action of text.matchAll(/{{-?[\s\S]*?}}/g)) {
+    const actionStart = action.index ?? 0;
+    const raw = action[0];
+
+    for (const match of raw.matchAll(/\$[A-Za-z_][A-Za-z0-9_]*/g)) {
+      const name = match[0] ?? "";
+      const start = actionStart + (match.index ?? 0);
+      references.push({
+        name,
+        start,
+        end: start + name.length,
+      });
+    }
+  }
+
+  return references;
 }
 
 function validatePartials(text: string, partialNames: string[]): Diagnostic[] {

@@ -189,6 +189,42 @@ test("accepts used template variables", () => {
   assert.equal(diagnostics.length, 0);
 });
 
+test("reports undefined template variables", () => {
+  const diagnostics = analyzeDocument("<h1>{{ $title }}</h1>", {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/shortcodes/callout.html",
+  }).diagnostics;
+
+  assert.ok(
+    diagnostics.some((diagnostic) =>
+      /Template variable "\$title" is used but not defined/.test(diagnostic.message),
+    ),
+  );
+});
+
+test("accepts variables declared by range assignment", () => {
+  const diagnostics = analyzeDocument('{{ range $index, $page := .Pages }}{{ $index }}{{ $page.Title }}{{ end }}', {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/list.html",
+  }).diagnostics;
+
+  assert.equal(diagnostics.length, 0);
+});
+
 test("offers partial completions inside partial calls", () => {
   const items = getCompletions('{{ partial "sh', { line: 0, character: 13 }, {
     project: {
