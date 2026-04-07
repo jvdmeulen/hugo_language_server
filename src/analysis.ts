@@ -27,7 +27,9 @@ export function analyzeDocument(
     };
   }
 
-  const frontMatter = analyzeFrontMatter(text);
+  const frontMatter = analyzeFrontMatter(text, {
+    templateParamNames: options?.project?.templateParamNames,
+  });
   const shortcodes = analyzeShortcodes(text, shortcodeNames);
 
   return {
@@ -51,7 +53,9 @@ export function getCompletions(
     }) ?? [];
   }
 
-  const frontMatter = analyzeFrontMatter(text);
+  const frontMatter = analyzeFrontMatter(text, {
+    templateParamNames: options?.project?.templateParamNames,
+  });
   const frontMatterItems = frontMatterCompletions(frontMatter.block, position);
   if (frontMatterItems) {
     return frontMatterItems;

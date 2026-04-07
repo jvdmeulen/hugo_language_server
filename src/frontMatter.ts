@@ -123,6 +123,24 @@ function extractDelimitedFrontMatter(
 export function analyzeFrontMatter(text: string): {
   block?: FrontMatterBlock;
   diagnostics: Diagnostic[];
+};
+export function analyzeFrontMatter(
+  text: string,
+  options?: {
+    templateParamNames?: string[];
+  },
+): {
+  block?: FrontMatterBlock;
+  diagnostics: Diagnostic[];
+};
+export function analyzeFrontMatter(
+  text: string,
+  options?: {
+    templateParamNames?: string[];
+  },
+): {
+  block?: FrontMatterBlock;
+  diagnostics: Diagnostic[];
 } {
   const block = extractFrontMatter(text);
 
@@ -144,7 +162,7 @@ export function analyzeFrontMatter(text: string): {
 
   try {
     const parsed = parseFrontMatterBlock(block);
-    diagnostics.push(...validateKnownKeys(text, block, parsed));
+    diagnostics.push(...validateKnownKeys(text, block, parsed, options));
   } catch (error) {
     diagnostics.push({
       severity: DiagnosticSeverity.Error,
@@ -190,6 +208,9 @@ function validateKnownKeys(
   text: string,
   block: FrontMatterBlock,
   parsed: unknown,
+  options?: {
+    templateParamNames?: string[];
+  },
 ): Diagnostic[] {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return [
@@ -204,17 +225,20 @@ function validateKnownKeys(
 
   const diagnostics: Diagnostic[] = [];
   const record = parsed as Record<string, unknown>;
+  const templateParamNames = new Set((options?.templateParamNames ?? []).map(normalizeParamName));
 
   for (const [key, value] of Object.entries(record)) {
     const keyRange = findKeyRange(text, block, key) ?? block.contentRange;
 
     if (!KEY_SET.has(key as (typeof HUGO_FRONT_MATTER_KEYS)[number])) {
-      diagnostics.push({
-        severity: DiagnosticSeverity.Warning,
-        message: `Unknown Hugo front matter key "${key}".`,
-        range: keyRange,
-        source: "hugo-lsp",
-      });
+      if (templateParamNames.size > 0 && !templateParamNames.has(normalizeParamName(key))) {
+        diagnostics.push({
+          severity: DiagnosticSeverity.Warning,
+          message: `Custom front matter param "${key}" was not found in project templates.`,
+          range: keyRange,
+          source: "hugo-lsp",
+        });
+      }
       continue;
     }
 
@@ -272,6 +296,10 @@ function findKeyRange(
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeParamName(name: string): string {
+  return name.trim().toLowerCase();
 }
 
 function validateContextualFrontMatter(

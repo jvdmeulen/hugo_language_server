@@ -21,6 +21,7 @@ export const HUGO_FRONT_MATTER_KEYS = [
   "resources",
   "cascade",
   "headless",
+  "params",
 ] as const;
 
 export const HUGO_SHORTCODES = [
@@ -463,4 +464,5 @@ export const FRONT_MATTER_KEY_TYPES: Record<string, string[]> = {
   resources: ["array", "object"],
   cascade: ["array", "object"],
   headless: ["boolean"],
+  params: ["object"],
 };

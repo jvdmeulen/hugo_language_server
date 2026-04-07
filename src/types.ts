@@ -46,4 +46,5 @@ export interface ProjectContext {
   contentRoots: string[];
   shortcodeNames: string[];
   partialNames: string[];
+  templateParamNames?: string[];
 }

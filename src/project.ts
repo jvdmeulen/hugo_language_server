@@ -53,6 +53,7 @@ export function resolveProjectContext(
     contentRoots,
     shortcodeNames: hugoRoot ? getKnownEntries(join(hugoRoot, "layouts", "shortcodes")) : [],
     partialNames: hugoRoot ? getKnownEntries(join(hugoRoot, "layouts", "partials")) : [],
+    templateParamNames: hugoRoot ? getTemplateParamNames(hugoRoot) : [],
   };
 }
 
@@ -102,6 +103,64 @@ function getKnownEntries(directory: string): string[] {
   const names = new Set<string>();
   collectEntries(directory, names);
   return [...names].sort();
+}
+
+function getTemplateParamNames(hugoRoot: string): string[] {
+  const layoutsRoot = join(hugoRoot, "layouts");
+  if (!existsSync(layoutsRoot)) {
+    return [];
+  }
+
+  const names = new Set<string>();
+  collectTemplateParamNames(layoutsRoot, names);
+  return [...names].sort();
+}
+
+function collectTemplateParamNames(directory: string, names: Set<string>): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      collectTemplateParamNames(fullPath, names);
+      continue;
+    }
+
+    if (!entry.isFile() || extname(entry.name) !== ".html") {
+      continue;
+    }
+
+    const content = readFileSync(fullPath, "utf8");
+    for (const name of extractTemplateParamNames(content)) {
+      names.add(name);
+    }
+  }
+}
+
+function extractTemplateParamNames(content: string): string[] {
+  const names = new Set<string>();
+  const quotedKey = String.raw`["'\`]([A-Za-z][A-Za-z0-9_-]*)["'\`]`;
+
+  for (const match of content.matchAll(/\.Params\.([A-Za-z][A-Za-z0-9_-]*)/g)) {
+    names.add(normalizeParamName(match[1] ?? ""));
+  }
+
+  for (const match of content.matchAll(new RegExp(String.raw`\.Param\s+${quotedKey}`, "g"))) {
+    names.add(normalizeParamName(match[1] ?? ""));
+  }
+
+  for (const match of content.matchAll(new RegExp(String.raw`index\s+(?:\.Page\.)?\.Params\s+${quotedKey}`, "g"))) {
+    names.add(normalizeParamName(match[1] ?? ""));
+  }
+
+  for (const match of content.matchAll(/["'`]\.?Params\.([A-Za-z][A-Za-z0-9_-]*)["'`]/g)) {
+    names.add(normalizeParamName(match[1] ?? ""));
+  }
+
+  return [...names].filter(Boolean);
+}
+
+function normalizeParamName(name: string): string {
+  return name.trim().toLowerCase();
 }
 
 function collectEntries(directory: string, names: Set<string>, prefix = ""): void {

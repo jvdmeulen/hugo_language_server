@@ -34,6 +34,50 @@ test("matches external contentDir back to the Hugo root", () => {
   assert.ok(context.shortcodeNames.includes("callout"));
 });
 
+test("scans template params from layouts", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-params-"));
+  mkdirSync(join(workspaceRoot, "content"), { recursive: true });
+  mkdirSync(join(workspaceRoot, "layouts", "_default"), { recursive: true });
+  writeFileSync(join(workspaceRoot, "hugo.toml"), "baseURL = 'https://example.org'\n");
+  writeFileSync(
+    join(workspaceRoot, "layouts", "_default", "single.html"),
+    '{{ with .Params.heroImage }}{{ . }}{{ end }} {{ .Param "cta_text" }} {{ index .Params "badge" }} {{ cond true "Params.promotedOnRubriek" ".Params.promotedOnSubRubriek" }}',
+  );
+
+  const context = resolveProjectContext(`file://${join(workspaceRoot, "content", "post.md")}`, [workspaceRoot]);
+
+  assert.deepEqual(context.templateParamNames, [
+    "badge",
+    "cta_text",
+    "heroimage",
+    "promotedonrubriek",
+    "promotedonsubrubriek",
+  ]);
+});
+
+test("warns when scanned templates do not use a custom front matter param", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-unused-param-"));
+  mkdirSync(join(workspaceRoot, "content"), { recursive: true });
+  mkdirSync(join(workspaceRoot, "layouts", "_default"), { recursive: true });
+  writeFileSync(join(workspaceRoot, "hugo.toml"), "baseURL = 'https://example.org'\n");
+  writeFileSync(join(workspaceRoot, "layouts", "_default", "single.html"), "{{ .Params.heroImage }}");
+
+  const contentPath = join(workspaceRoot, "content", "post.md");
+  const context = resolveProjectContext(`file://${contentPath}`, [workspaceRoot]);
+  const diagnostics = analyzeDocument(`---
+title: Hello
+heroImage: /images/hero.jpg
+unusedParam: value
+---
+Body`, {
+    project: context,
+    relativePath: "content/post.md",
+  }).diagnostics;
+
+  assert.equal(diagnostics.length, 1);
+  assert.match(diagnostics[0]?.message ?? "", /unusedParam.*not found in project templates/);
+});
+
 test("reports template delimiter mismatches", () => {
   const diagnostics = analyzeDocument('{{ partial "header" . ', {
     project: {
