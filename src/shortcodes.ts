@@ -113,9 +113,12 @@ export function shortcodeCompletion(
   return {
     items: shortcodeNames.map((shortcode) => ({
       label: shortcode,
-      kind: CompletionItemKind.Function,
+      kind: CompletionItemKind.Text,
       insertText: shortcode,
       detail: "Hugo shortcode",
+      labelDetails: {
+        description: "Hugo shortcode",
+      },
     })),
   };
 }

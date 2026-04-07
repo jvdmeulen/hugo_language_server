@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { CompletionItemKind } from "vscode-languageserver";
 
 import { analyzeDocument, getCompletions } from "../src/analysis.js";
 
@@ -27,7 +28,11 @@ test("reports mismatched closing shortcode", () => {
 
 test("offers shortcode completions in shortcode context", () => {
   const items = getCompletions("Intro\n{{< yo", { line: 1, character: 7 });
-  assert.ok(items.some((item) => item.label === "youtube"));
+  const youtube = items.find((item) => item.label === "youtube");
+  assert.ok(youtube);
+  assert.equal(youtube.kind, CompletionItemKind.Text);
+  assert.equal(youtube.detail, "Hugo shortcode");
+  assert.equal(youtube.labelDetails?.description, "Hugo shortcode");
 });
 
 test("accepts project shortcode from layouts/shortcodes", () => {
