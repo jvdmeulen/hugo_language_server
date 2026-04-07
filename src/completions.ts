@@ -31,5 +31,9 @@ function frontMatterInsertText(kind: FrontMatterBlock["kind"], key: string): str
     return `${key} = "$1"`;
   }
 
+  if (kind === "json") {
+    return `"${key}": $1`;
+  }
+
   return `${key}: $1`;
 }

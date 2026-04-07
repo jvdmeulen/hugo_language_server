@@ -49,7 +49,12 @@ function getFrontMatterHover(text: string, position: Position): Hover | null {
   }
 
   const offset = offsetAt(text, position);
-  const keyPattern = block.kind === "yaml" ? /(^|\n)(\s*)([A-Za-z][A-Za-z0-9]*)\s*:/g : /(^|\n)(\s*)([A-Za-z][A-Za-z0-9]*)\s*=/g;
+  const keyPattern =
+    block.kind === "yaml"
+      ? /(^|\n)(\s*)([A-Za-z][A-Za-z0-9]*)\s*:/g
+      : block.kind === "toml"
+        ? /(^|\n)(\s*)([A-Za-z][A-Za-z0-9]*)\s*=/g
+        : /(^|\n)(\s*)"([A-Za-z][A-Za-z0-9]*)"\s*:/g;
 
   for (const match of block.content.matchAll(keyPattern)) {
     const key = match[3] ?? "";
@@ -58,7 +63,8 @@ function getFrontMatterHover(text: string, position: Position): Hover | null {
     }
 
     const contentIndex = match.index ?? 0;
-    const keyStart = block.raw.indexOf(block.content) + contentIndex + (match[1]?.length ?? 0) + (match[2]?.length ?? 0);
+    const quoteOffset = block.kind === "json" ? 1 : 0;
+    const keyStart = block.raw.indexOf(block.content) + contentIndex + (match[1]?.length ?? 0) + (match[2]?.length ?? 0) + quoteOffset;
     const keyEnd = keyStart + key.length;
 
     if (offset < keyStart || offset > keyEnd) {

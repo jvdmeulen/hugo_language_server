@@ -17,6 +17,71 @@ export function extractFrontMatter(text: string): FrontMatterBlock | undefined {
     return extractDelimitedFrontMatter(text, "+++", "toml");
   }
 
+  if (text.startsWith("{") && !text.startsWith("{{")) {
+    return extractJsonFrontMatter(text);
+  }
+
+  return undefined;
+}
+
+function extractJsonFrontMatter(text: string): FrontMatterBlock | undefined {
+  const closingIndex = findJsonObjectEnd(text);
+  const raw = closingIndex === undefined ? text : text.slice(0, closingIndex + 1);
+
+  return {
+    kind: "json",
+    delimiter: "{}",
+    range: rangeFromOffsets(text, 0, raw.length),
+    contentRange: rangeFromOffsets(text, 0, raw.length),
+    content: raw,
+    raw,
+  };
+}
+
+function findJsonObjectEnd(text: string): number | undefined {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (character === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (character === "\"") {
+        inString = false;
+      }
+
+      continue;
+    }
+
+    if (character === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (character === "{") {
+      depth += 1;
+      continue;
+    }
+
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
   return undefined;
 }
 
@@ -67,7 +132,7 @@ export function analyzeFrontMatter(text: string): {
 
   const diagnostics: Diagnostic[] = [];
 
-  if (!block.raw.endsWith(`\n${block.delimiter}`) && text.trim() === block.raw.trim()) {
+  if (block.kind !== "json" && !block.raw.endsWith(`\n${block.delimiter}`) && text.trim() === block.raw.trim()) {
     diagnostics.push({
       severity: DiagnosticSeverity.Error,
       message: `Missing closing ${block.delimiter} front matter delimiter.`,
@@ -78,7 +143,7 @@ export function analyzeFrontMatter(text: string): {
   }
 
   try {
-    const parsed = block.kind === "yaml" ? parseYaml(block.content) : parseToml(block.content);
+    const parsed = parseFrontMatterBlock(block);
     diagnostics.push(...validateKnownKeys(text, block, parsed));
   } catch (error) {
     diagnostics.push({
@@ -90,6 +155,17 @@ export function analyzeFrontMatter(text: string): {
   }
 
   return { block, diagnostics };
+}
+
+function parseFrontMatterBlock(block: FrontMatterBlock): unknown {
+  switch (block.kind) {
+    case "yaml":
+      return parseYaml(block.content);
+    case "toml":
+      return parseToml(block.content);
+    case "json":
+      return parseJson(block.content);
+  }
 }
 
 function parseYaml(content: string): unknown {
@@ -104,6 +180,10 @@ function parseYaml(content: string): unknown {
 
 function parseToml(content: string): unknown {
   return TOML.parse(content);
+}
+
+function parseJson(content: string): unknown {
+  return JSON.parse(content);
 }
 
 function validateKnownKeys(
@@ -176,14 +256,17 @@ function findKeyRange(
   const matcher =
     block.kind === "yaml"
       ? new RegExp(`(^|\\n)(\\s*)${escapeRegExp(key)}\\s*:`, "m")
-      : new RegExp(`(^|\\n)(\\s*)${escapeRegExp(key)}\\s*=`, "m");
+      : block.kind === "toml"
+        ? new RegExp(`(^|\\n)(\\s*)${escapeRegExp(key)}\\s*=`, "m")
+        : new RegExp(`(^|\\n)(\\s*)"${escapeRegExp(key)}"\\s*:`, "m");
   const match = matcher.exec(block.content);
 
   if (!match || match.index === undefined) {
     return undefined;
   }
 
-  const keyStart = block.raw.indexOf(block.content) + match.index + match[1].length + match[2].length;
+  const quoteOffset = block.kind === "json" ? 1 : 0;
+  const keyStart = block.raw.indexOf(block.content) + match.index + match[1].length + match[2].length + quoteOffset;
   return rangeFromOffsets(text, keyStart, keyStart + key.length);
 }
 

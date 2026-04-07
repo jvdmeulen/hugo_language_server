@@ -16,6 +16,18 @@ Body`;
   assert.equal(diagnostics.length, 0);
 });
 
+test("accepts valid JSON front matter", () => {
+  const text = `{
+  "title": "Hello",
+  "draft": false,
+  "tags": ["hugo"]
+}
+Body`;
+
+  const diagnostics = analyzeDocument(text).diagnostics;
+  assert.equal(diagnostics.length, 0);
+});
+
 test("reports missing front matter delimiter", () => {
   const text = `---
 title: Hello`;
@@ -43,6 +55,17 @@ draft = nope
 
   const diagnostics = analyzeDocument(text).diagnostics;
   assert.ok(diagnostics.some((diagnostic) => /Invalid|Unexpected/i.test(diagnostic.message)));
+});
+
+test("reports invalid JSON front matter", () => {
+  const text = `{
+  "title": "Hello",
+  "draft": nope
+}
+Body`;
+
+  const diagnostics = analyzeDocument(text).diagnostics;
+  assert.ok(diagnostics.some((diagnostic) => /Unexpected|JSON/i.test(diagnostic.message)));
 });
 
 test("reports invalid date-like front matter values", () => {

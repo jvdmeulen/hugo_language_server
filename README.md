@@ -4,7 +4,7 @@ Een kleine Hugo-specifieke language server in TypeScript voor Markdown-contentbe
 
 ## Wat v1 doet
 
-- diagnostics voor YAML- en TOML-front matter
+- diagnostics voor YAML-, TOML- en JSON-front matter
 - waarschuwingen voor onbekende Hugo front matter keys
 - eenvoudige typechecks voor veelgebruikte Hugo keys
 - diagnostics voor ongeldige of onbekende Hugo shortcodes

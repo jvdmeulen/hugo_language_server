@@ -5,7 +5,7 @@ import type {
   Range,
 } from "vscode-languageserver";
 
-export type FrontMatterKind = "yaml" | "toml";
+export type FrontMatterKind = "yaml" | "toml" | "json";
 
 export interface FrontMatterBlock {
   kind: FrontMatterKind;
