@@ -1,3 +1,9 @@
+# It's a codex/openai test/slop project
+because i couldn't find anything
+
+
+
+
 # Hugo Language Server
 
 A Hugo-focused language server written in TypeScript. It runs over stdio and is intended to be used locally from Neovim, especially with `nvim-lspconfig` on Neovim 0.11+.
