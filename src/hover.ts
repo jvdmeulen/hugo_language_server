@@ -113,15 +113,24 @@ function getShortcodeHover(
 
     const doc = SHORTCODE_DOCS[name];
     const isProjectShortcode = project?.shortcodeNames.includes(name);
+    const description = doc?.summary ??
+      (isProjectShortcode
+        ? "Project shortcode detected in `layouts/shortcodes`."
+        : "Unknown shortcode. No matching built-in or project shortcode was found.");
+    const source = doc
+      ? "Source: built-in Hugo shortcode allowlist."
+      : isProjectShortcode
+        ? "Source: project shortcode under `layouts/shortcodes`."
+        : "Source: not found in the current Hugo shortcode index.";
 
     return {
       range: rangeFromOffsets(text, nameStart, nameEnd),
       contents: markdown([
         `**Hugo shortcode:** \`${name}\``,
-        doc?.summary ?? "Project shortcode detected in `layouts/shortcodes`.",
+        description,
         doc ? `Usage:\n\`\`\`md\n${doc.usage}\n\`\`\`` : "",
         doc?.notes?.length ? `Notes:\n${doc.notes.map((note) => `- ${note}`).join("\n")}` : "",
-        isProjectShortcode ? "Source: project shortcode under `layouts/shortcodes`." : "Source: built-in Hugo shortcode allowlist.",
+        source,
         "Since: not stated on the official Hugo docs page",
         "Docs: [Hugo shortcodes](https://gohugo.io/content-management/shortcodes/)",
       ]),

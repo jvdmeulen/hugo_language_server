@@ -45,6 +45,27 @@ test("shows hover for project shortcodes", () => {
 
   assert.ok(hover?.contents);
   assert.match((hover?.contents as { value: string }).value, /Project shortcode detected/i);
+  assert.match((hover?.contents as { value: string }).value, /Source: project shortcode/i);
+});
+
+test("shows clear hover for unknown shortcodes", () => {
+  const hover = getHover("{{< intr >}}", { line: 0, character: 5 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: ["callout"],
+      partialNames: [],
+    },
+  });
+
+  assert.ok(hover?.contents);
+  const value = (hover.contents as { value: string }).value;
+  assert.match(value, /Unknown shortcode/i);
+  assert.match(value, /not found in the current Hugo shortcode index/i);
+  assert.doesNotMatch(value, /Project shortcode detected/i);
+  assert.doesNotMatch(value, /built-in Hugo shortcode allowlist/i);
 });
 
 test("shows hover for partial calls", () => {
