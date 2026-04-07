@@ -34,6 +34,21 @@ test("matches external contentDir back to the Hugo root", () => {
   assert.ok(context.shortcodeNames.includes("callout"));
 });
 
+test("scans named shortcode params from shortcode templates", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-shortcode-params-"));
+  mkdirSync(join(workspaceRoot, "content"), { recursive: true });
+  mkdirSync(join(workspaceRoot, "layouts", "shortcodes", "cards"), { recursive: true });
+  writeFileSync(join(workspaceRoot, "hugo.toml"), "baseURL = 'https://example.org'\n");
+  writeFileSync(
+    join(workspaceRoot, "layouts", "shortcodes", "cards", "callout.html"),
+    '{{ .Get "title" }} {{ .Get `kind` }} {{ .Get 0 }}',
+  );
+
+  const context = resolveProjectContext(`file://${join(workspaceRoot, "content", "post.md")}`, [workspaceRoot]);
+
+  assert.deepEqual(context.shortcodeParamNames?.["cards/callout"], ["kind", "title"]);
+});
+
 test("scans template params from layouts", () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-params-"));
   mkdirSync(join(workspaceRoot, "content"), { recursive: true });

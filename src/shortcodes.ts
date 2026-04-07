@@ -7,6 +7,7 @@ import { offsetAt, rangeFromOffsets } from "./utils.js";
 export function analyzeShortcodes(
   text: string,
   shortcodeNames: readonly string[] = HUGO_SHORTCODES,
+  shortcodeParamNames: Record<string, string[]> = {},
 ): {
   diagnostics: Diagnostic[];
   parsed: ParsedShortcode[];
@@ -72,6 +73,10 @@ export function analyzeShortcodes(
       });
     }
 
+    if (!closing && shortcodeSet.has(name)) {
+      diagnostics.push(...validateShortcodeParams(body, name, range, shortcodeParamNames));
+    }
+
     if (closing) {
       const open = stack.pop();
       if (!open || open.name !== name || open.delimiter !== openingDelimiter) {
@@ -95,6 +100,54 @@ export function analyzeShortcodes(
 
 function isLikelyPairedShortcode(body: string): boolean {
   return !body.includes("=") && !body.includes(`"`) && !body.includes(`'`);
+}
+
+function validateShortcodeParams(
+  body: string,
+  name: string,
+  range: ReturnType<typeof rangeFromOffsets>,
+  shortcodeParamNames: Record<string, string[]>,
+): Diagnostic[] {
+  const expectedParams = shortcodeParamNames[name];
+  if (!expectedParams || expectedParams.length === 0) {
+    return [];
+  }
+
+  const expected = new Set(expectedParams.map(normalizeParamName));
+  const diagnostics: Diagnostic[] = [];
+
+  for (const paramName of getNamedShortcodeParams(body, name)) {
+    if (expected.has(normalizeParamName(paramName))) {
+      continue;
+    }
+
+    diagnostics.push({
+      severity: DiagnosticSeverity.Warning,
+      message: `Unknown parameter "${paramName}" for Hugo shortcode "${name}".`,
+      range,
+      source: "hugo-lsp",
+    });
+  }
+
+  return diagnostics;
+}
+
+function getNamedShortcodeParams(body: string, name: string): string[] {
+  const afterName = body
+    .replace(/^\//, "")
+    .trim()
+    .slice(name.length);
+  const names = new Set<string>();
+
+  for (const match of afterName.matchAll(/(?:^|\s)([A-Za-z][A-Za-z0-9_-]*)\s*=/g)) {
+    names.add(match[1] ?? "");
+  }
+
+  return [...names].filter(Boolean);
+}
+
+function normalizeParamName(name: string): string {
+  return name.trim().toLowerCase();
 }
 
 export function shortcodeCompletion(

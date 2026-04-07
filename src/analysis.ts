@@ -30,7 +30,7 @@ export function analyzeDocument(
   const frontMatter = analyzeFrontMatter(text, {
     templateParamNames: options?.project?.templateParamNames,
   });
-  const shortcodes = analyzeShortcodes(text, shortcodeNames);
+  const shortcodes = analyzeShortcodes(text, shortcodeNames, options?.project?.shortcodeParamNames);
 
   return {
     diagnostics: [...frontMatter.diagnostics, ...shortcodes.diagnostics],

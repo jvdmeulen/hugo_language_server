@@ -45,6 +45,7 @@ export interface ProjectContext {
   isHugoProject: boolean;
   contentRoots: string[];
   shortcodeNames: string[];
+  shortcodeParamNames?: Record<string, string[]>;
   partialNames: string[];
   templateParamNames?: string[];
 }

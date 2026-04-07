@@ -70,3 +70,55 @@ test("offers completion for project shortcode", () => {
   });
   assert.ok(items.some((item) => item.label === "gallery"));
 });
+
+test("accepts known named shortcode params from project templates", () => {
+  const diagnostics = analyzeDocument('{{< callout title="Hello" kind="info" >}}', {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: ["callout"],
+      shortcodeParamNames: {
+        callout: ["kind", "title"],
+      },
+      partialNames: [],
+    },
+  }).diagnostics;
+
+  assert.equal(diagnostics.length, 0);
+});
+
+test("warns about unknown named shortcode params", () => {
+  const diagnostics = analyzeDocument('{{< callout title="Hello" colour="blue" >}}', {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: ["callout"],
+      shortcodeParamNames: {
+        callout: ["kind", "title"],
+      },
+      partialNames: [],
+    },
+  }).diagnostics;
+
+  assert.equal(diagnostics.length, 1);
+  assert.match(diagnostics[0]?.message ?? "", /Unknown parameter "colour" for Hugo shortcode "callout"/);
+});
+
+test("does not validate shortcode params without a project schema", () => {
+  const diagnostics = analyzeDocument('{{< callout colour="blue" >}}', {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: ["callout"],
+      partialNames: [],
+    },
+  }).diagnostics;
+
+  assert.equal(diagnostics.length, 0);
+});

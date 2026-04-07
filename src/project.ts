@@ -52,6 +52,7 @@ export function resolveProjectContext(
     isHugoProject: Boolean(hugoRoot),
     contentRoots,
     shortcodeNames: hugoRoot ? getKnownEntries(join(hugoRoot, "layouts", "shortcodes")) : [],
+    shortcodeParamNames: hugoRoot ? getShortcodeParamNames(hugoRoot) : {},
     partialNames: hugoRoot ? getKnownEntries(join(hugoRoot, "layouts", "partials")) : [],
     templateParamNames: hugoRoot ? getTemplateParamNames(hugoRoot) : [],
   };
@@ -114,6 +115,57 @@ function getTemplateParamNames(hugoRoot: string): string[] {
   const names = new Set<string>();
   collectTemplateParamNames(layoutsRoot, names);
   return [...names].sort();
+}
+
+function getShortcodeParamNames(hugoRoot: string): Record<string, string[]> {
+  const shortcodesRoot = join(hugoRoot, "layouts", "shortcodes");
+  if (!existsSync(shortcodesRoot)) {
+    return {};
+  }
+
+  const result: Record<string, string[]> = {};
+  collectShortcodeParamNames(shortcodesRoot, result);
+  return result;
+}
+
+function collectShortcodeParamNames(
+  directory: string,
+  result: Record<string, string[]>,
+  prefix = "",
+): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      collectShortcodeParamNames(fullPath, result, prefix ? `${prefix}/${entry.name}` : entry.name);
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const extension = extname(entry.name);
+    if (extension !== ".html") {
+      continue;
+    }
+
+    const baseName = entry.name.slice(0, -extension.length);
+    const shortcodeName = prefix ? `${prefix}/${baseName}` : baseName;
+    const content = readFileSync(fullPath, "utf8");
+    result[normalizeEntryName(shortcodeName)] = extractShortcodeParamNames(content);
+  }
+}
+
+function extractShortcodeParamNames(content: string): string[] {
+  const names = new Set<string>();
+  const quotedKey = String.raw`["'\`]([A-Za-z][A-Za-z0-9_-]*)["'\`]`;
+
+  for (const match of content.matchAll(new RegExp(String.raw`\.Get\s+${quotedKey}`, "g"))) {
+    names.add(normalizeParamName(match[1] ?? ""));
+  }
+
+  return [...names].filter(Boolean).sort();
 }
 
 function collectTemplateParamNames(directory: string, names: Set<string>): void {
