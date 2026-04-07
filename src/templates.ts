@@ -15,7 +15,7 @@ import {
   HUGO_TEMPLATE_METHODS,
   HUGO_TEMPLATE_OBJECTS,
 } from "./constants.js";
-import { getOfficialDocSymbols } from "./officialDocs.js";
+import { getOfficialDocCompletionEntries } from "./officialDocs.js";
 import { offsetAt } from "./utils.js";
 import { rangeFromOffsets } from "./utils.js";
 
@@ -55,12 +55,16 @@ export function templateCompletion(
     }));
   }
 
-  const actionMatch = /{{-?[\s\S]*?\b([A-Za-z.]*)$/.exec(beforeCursor);
+  const actionMatch = /(?:^|[\s(|])([$.]?[A-Za-z.]*)$/.exec(beforeCursor);
   if (!actionMatch) {
     return undefined;
   }
 
-  const keywordItems = HUGO_TEMPLATE_BLOCK_KEYWORDS.map((keyword) => ({
+  const tokenPrefix = actionMatch[1] ?? "";
+  const isDotContext = tokenPrefix.startsWith(".");
+  const chainContext = getCompletionChain(tokenPrefix);
+
+  const keywordItems = isDotContext ? [] : HUGO_TEMPLATE_BLOCK_KEYWORDS.map((keyword) => ({
     label: keyword,
     kind: CompletionItemKind.Keyword,
     insertText: keywordSnippet(keyword),
@@ -68,35 +72,55 @@ export function templateCompletion(
     detail: "Hugo template keyword",
   }));
 
-  const functionItems = HUGO_TEMPLATE_FUNCTIONS.map((fn) => ({
+  const functionItems = isDotContext ? [] : HUGO_TEMPLATE_FUNCTIONS.map((fn) => ({
     label: fn,
     kind: CompletionItemKind.Function,
     insertText: fn,
     detail: "Hugo template function",
   }));
 
-  const objectItems = HUGO_TEMPLATE_OBJECTS.map((item) => ({
+  const objectItems = isDotContext ? [] : HUGO_TEMPLATE_OBJECTS.map((item) => ({
     label: item,
     kind: CompletionItemKind.Variable,
     insertText: item,
     detail: "Hugo template object",
   }));
 
-  const methodItems = HUGO_TEMPLATE_METHODS.map((item) => ({
+  const methodItems = getManualMethodCompletionItems(tokenPrefix).map((item) => ({
     label: item,
     kind: CompletionItemKind.Method,
-    insertText: item,
+    insertText: completionInsertText(item, chainContext),
     detail: "Hugo template method",
   }));
 
-  const officialItems = getOfficialDocSymbols().map((item) => ({
-    label: item,
-    kind: item.startsWith(".") ? CompletionItemKind.Method : CompletionItemKind.Function,
-    insertText: item,
-    detail: "Official Hugo docs",
-  }));
+  const officialItems = getOfficialDocCompletionEntries({
+    relativePath: options.relativePath,
+    tokenPrefix,
+  }).flatMap((entry) => {
+    const symbols = entry.kind === "function" && entry.aliases?.length
+      ? [entry.symbol, ...entry.aliases]
+      : [entry.symbol];
 
-  const shortcodeObjectItems = options.relativePath?.startsWith("layouts/shortcodes/")
+    return symbols.map((symbol) => ({
+      label: symbol,
+      kind: symbol.startsWith(".") ? CompletionItemKind.Method : CompletionItemKind.Function,
+      insertText: completionInsertText(symbol, chainContext),
+      detail: entry.kind === "method"
+        ? `Official Hugo docs (${entry.receiver})`
+        : `Official Hugo docs (${entry.namespace})`,
+      documentation: entry.url,
+    }));
+  });
+
+  const officialItemsByLabel = dedupeCompletionItemsByLabel(officialItems);
+
+  const showShortcodeTopLevelItems = Boolean(
+    options.relativePath?.startsWith("layouts/shortcodes/") &&
+      isDotContext &&
+      !chainContext,
+  );
+
+  const shortcodeObjectItems = showShortcodeTopLevelItems
     ? HUGO_SHORTCODE_TEMPLATE_OBJECTS.map((item) => ({
         label: item,
         kind: CompletionItemKind.Variable,
@@ -105,7 +129,7 @@ export function templateCompletion(
       }))
     : [];
 
-  const shortcodeMethodItems = options.relativePath?.startsWith("layouts/shortcodes/")
+  const shortcodeMethodItems = showShortcodeTopLevelItems
     ? HUGO_SHORTCODE_TEMPLATE_METHODS.map((item) => ({
         label: item,
         kind: CompletionItemKind.Method,
@@ -119,10 +143,68 @@ export function templateCompletion(
     ...functionItems,
     ...objectItems,
     ...methodItems,
-    ...officialItems,
+    ...officialItemsByLabel,
     ...shortcodeObjectItems,
     ...shortcodeMethodItems,
   ];
+}
+
+function getManualMethodCompletionItems(tokenPrefix: string): readonly string[] {
+  if (tokenPrefix.startsWith(".Scratch.")) {
+    return HUGO_TEMPLATE_METHODS.filter((item) => item.startsWith(".Scratch."));
+  }
+
+  if (tokenPrefix.startsWith(".Resources.")) {
+    return HUGO_TEMPLATE_METHODS.filter((item) => item.startsWith(".Resources."));
+  }
+
+  if (tokenPrefix.startsWith(".OutputFormats.")) {
+    return HUGO_TEMPLATE_METHODS.filter((item) => item.startsWith(".OutputFormats."));
+  }
+
+  return [];
+}
+
+function getCompletionChain(tokenPrefix: string): string | undefined {
+  if (!tokenPrefix.startsWith(".")) {
+    return undefined;
+  }
+
+  const normalized = tokenPrefix.endsWith(".") ? tokenPrefix.slice(0, -1) : tokenPrefix;
+  if (tokenPrefix.endsWith(".")) {
+    return normalized || undefined;
+  }
+
+  const lastDotIndex = normalized.lastIndexOf(".");
+  if (lastDotIndex <= 0) {
+    return undefined;
+  }
+
+  return normalized.slice(0, lastDotIndex);
+}
+
+function completionInsertText(symbol: string, chainContext: string | undefined): string {
+  if (chainContext && symbol.startsWith(".")) {
+    return symbol.slice(1);
+  }
+
+  return symbol;
+}
+
+function dedupeCompletionItemsByLabel(items: CompletionItem[]): CompletionItem[] {
+  const seen = new Set<string>();
+  const result: CompletionItem[] = [];
+
+  for (const item of items) {
+    if (seen.has(item.label)) {
+      continue;
+    }
+
+    seen.add(item.label);
+    result.push(item);
+  }
+
+  return result;
 }
 
 function validateTemplateDelimiters(text: string): Diagnostic[] {

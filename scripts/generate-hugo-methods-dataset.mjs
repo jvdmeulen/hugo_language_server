@@ -147,7 +147,7 @@ function extractSummary(html) {
 
 function extractUsage(html) {
   const code = matchFirst(html, /<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/i);
-  return code ? decodeHtml(stripHtml(code)).trim() : undefined;
+  return code ? stripCodeHtml(code).trim() : undefined;
 }
 
 function extractSinceVersion(html) {
@@ -160,6 +160,10 @@ function matchFirst(text, pattern) {
 
 function stripHtml(text) {
   return text.replace(/<[^>]+>/g, " ");
+}
+
+function stripCodeHtml(text) {
+  return decodeHtml(text.replace(/<[^>]+>/g, ""));
 }
 
 function normalizeText(text) {

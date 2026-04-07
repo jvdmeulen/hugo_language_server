@@ -141,8 +141,51 @@ test("offers template object and method completions", () => {
   });
 
   assert.ok(items.some((item) => item.label === ".Scratch"));
-  assert.ok(items.some((item) => item.label === ".Scratch.Get"));
   assert.ok(items.some((item) => item.label === ".Site"));
+  assert.ok(!items.some((item) => item.label === ".Version"));
+});
+
+test("keeps method completions grouped by receiver context", () => {
+  const paginatorItems = getCompletions("{{ .Paginator.", { line: 0, character: 14 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/baseof.html",
+  });
+  const siteItems = getCompletions("{{ .Site.", { line: 0, character: 9 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/baseof.html",
+  });
+  const scratchItems = getCompletions("{{ .Scratch.", { line: 0, character: 12 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/baseof.html",
+  });
+
+  assert.ok(paginatorItems.some((item) => item.label === ".PageNumber"));
+  assert.ok(!paginatorItems.some((item) => item.label === ".Version"));
+  assert.ok(siteItems.some((item) => item.label === ".Version"));
+  assert.ok(!siteItems.some((item) => item.label === ".PageNumber"));
+  assert.ok(scratchItems.some((item) => item.label === ".Scratch.Get"));
+  assert.ok(!scratchItems.some((item) => item.label === ".Version"));
 });
 
 test("offers shortcode template symbol completions", () => {
