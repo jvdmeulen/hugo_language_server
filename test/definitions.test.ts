@@ -45,3 +45,42 @@ test("jumps from partial usage to partial template", () => {
 
   assert.equal(locations[0]?.uri, pathToFileURL(join(workspaceRoot, "layouts", "partials", "shared", "hero.html")).toString());
 });
+
+test("jumps from template variable usage to declaration", () => {
+  const uri = "file:///tmp/demo/layouts/shortcodes/callout.html";
+  const locations = getDefinition('{{ $title := .Get "title" }}<h1>{{ $title }}</h1>', { line: 0, character: 36 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/shortcodes/callout.html",
+    documentUri: uri,
+  });
+
+  assert.equal(locations[0]?.uri, uri);
+  assert.deepEqual(locations[0]?.range.start, { line: 0, character: 3 });
+});
+
+test("jumps from range variable usage to declaration", () => {
+  const uri = "file:///tmp/demo/layouts/_default/list.html";
+  const text = "{{ range $index, $page := .Pages }}{{ $page.Title }}{{ end }}";
+  const locations = getDefinition(text, { line: 0, character: 40 }, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/list.html",
+    documentUri: uri,
+  });
+
+  assert.equal(locations[0]?.uri, uri);
+  assert.deepEqual(locations[0]?.range.start, { line: 0, character: 17 });
+});

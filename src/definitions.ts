@@ -11,9 +11,15 @@ export function getDefinition(
   options: {
     project?: ProjectContext;
     relativePath?: string;
+    documentUri?: string;
   },
 ): Location[] {
   const project = options.project;
+  const variableDefinition = getTemplateVariableDefinition(text, position, options.relativePath, options.documentUri);
+  if (variableDefinition) {
+    return [variableDefinition];
+  }
+
   if (!project?.hugoRoot) {
     return [];
   }
@@ -29,6 +35,99 @@ export function getDefinition(
   }
 
   return [];
+}
+
+function getTemplateVariableDefinition(
+  text: string,
+  position: Position,
+  relativePath?: string,
+  documentUri?: string,
+): Location | undefined {
+  if (!relativePath?.startsWith("layouts/") || !documentUri) {
+    return undefined;
+  }
+
+  const offset = offsetAt(text, position);
+  const variable = getVariableAtOffset(text, offset);
+  if (!variable) {
+    return undefined;
+  }
+
+  const declaration = findTemplateVariableDeclaration(text, variable.name, offset);
+  if (!declaration) {
+    return undefined;
+  }
+
+  return {
+    uri: documentUri,
+    range: rangeFromOffsets(text, declaration.start, declaration.end),
+  };
+}
+
+function getVariableAtOffset(text: string, offset: number): { name: string; start: number; end: number } | undefined {
+  for (const match of text.matchAll(/\$[A-Za-z_][A-Za-z0-9_]*/g)) {
+    const name = match[0] ?? "";
+    const start = match.index ?? 0;
+    const end = start + name.length;
+
+    if (offset >= start && offset <= end) {
+      return { name, start, end };
+    }
+  }
+
+  return undefined;
+}
+
+function findTemplateVariableDeclaration(
+  text: string,
+  variableName: string,
+  beforeOffset: number,
+): { start: number; end: number } | undefined {
+  const declarations = collectTemplateVariableDeclarations(text)
+    .filter((declaration) => declaration.name === variableName && declaration.start <= beforeOffset)
+    .sort((left, right) => right.start - left.start);
+
+  return declarations[0];
+}
+
+function collectTemplateVariableDeclarations(text: string): Array<{ name: string; start: number; end: number }> {
+  const declarations: Array<{ name: string; start: number; end: number }> = [];
+
+  for (const action of text.matchAll(/{{-?[\s\S]*?}}/g)) {
+    const actionStart = action.index ?? 0;
+    const raw = action[0];
+
+    for (const match of raw.matchAll(/(?:range|with)\s+(\$[A-Za-z_][A-Za-z0-9_]*)\s*,\s*(\$[A-Za-z_][A-Za-z0-9_]*)\s*:=/g)) {
+      const firstName = match[1] ?? "";
+      const secondName = match[2] ?? "";
+      const matchStart = actionStart + (match.index ?? 0);
+      const firstStart = matchStart + match[0].indexOf(firstName);
+      const secondStart = matchStart + match[0].indexOf(secondName);
+
+      declarations.push({
+        name: firstName,
+        start: firstStart,
+        end: firstStart + firstName.length,
+      });
+      declarations.push({
+        name: secondName,
+        start: secondStart,
+        end: secondStart + secondName.length,
+      });
+    }
+
+    for (const match of raw.matchAll(/(^|[^\w$,])(\$[A-Za-z_][A-Za-z0-9_]*)\s*:=/g)) {
+      const name = match[2] ?? "";
+      const start = actionStart + (match.index ?? 0) + (match[1]?.length ?? 0);
+      declarations.push({
+        name,
+        start,
+        end: start + name.length,
+      });
+    }
+  }
+
+  return declarations;
 }
 
 function getShortcodeDefinition(

@@ -116,6 +116,7 @@ connection.onDefinition((params) => {
   return getDefinition(document.getText(), params.position, {
     project,
     relativePath: filePath ? getRelativeProjectPath(filePath, project) : undefined,
+    documentUri: document.uri,
   });
 });
 
