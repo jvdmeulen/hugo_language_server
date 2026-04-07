@@ -153,6 +153,42 @@ test("reports missing template end blocks", () => {
   );
 });
 
+test("reports unused template variables", () => {
+  const diagnostics = analyzeDocument('{{ $title := .Get "title" }}<h1>{{ .Title }}</h1>', {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/shortcodes/callout.html",
+  }).diagnostics;
+
+  assert.ok(
+    diagnostics.some((diagnostic) =>
+      /Template variable "\$title" is declared but never used/.test(diagnostic.message),
+    ),
+  );
+});
+
+test("accepts used template variables", () => {
+  const diagnostics = analyzeDocument('{{ $title := .Get "title" }}<h1>{{ $title }}</h1>', {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/shortcodes/callout.html",
+  }).diagnostics;
+
+  assert.equal(diagnostics.length, 0);
+});
+
 test("offers partial completions inside partial calls", () => {
   const items = getCompletions('{{ partial "sh', { line: 0, character: 13 }, {
     project: {

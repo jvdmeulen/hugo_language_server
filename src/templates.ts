@@ -30,6 +30,7 @@ export function analyzeTemplate(
   const diagnostics: Diagnostic[] = [];
   diagnostics.push(...validateTemplateDelimiters(text));
   diagnostics.push(...validateTemplateBlocks(text));
+  diagnostics.push(...validateUnusedTemplateVariables(text));
   diagnostics.push(...validatePartials(text, options.partialNames));
   diagnostics.push(...validateShortcodeReferences(text, options.shortcodeNames, options.relativePath));
   return diagnostics;
@@ -297,6 +298,55 @@ function validateTemplateBlocks(text: string): Diagnostic[] {
   return diagnostics;
 }
 
+function validateUnusedTemplateVariables(text: string): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  const declarations = collectTemplateVariableDeclarations(text);
+
+  for (const declaration of declarations) {
+    if (declaration.name === "$" || declaration.name === "_") {
+      continue;
+    }
+
+    if (countTemplateVariableReferences(text, declaration.name) > 1) {
+      continue;
+    }
+
+    diagnostics.push({
+      severity: DiagnosticSeverity.Warning,
+      message: `Template variable "${declaration.name}" is declared but never used.`,
+      range: rangeFromOffsets(text, declaration.start, declaration.end),
+      source: "hugo-lsp",
+    });
+  }
+
+  return diagnostics;
+}
+
+function collectTemplateVariableDeclarations(text: string): Array<{ name: string; start: number; end: number }> {
+  const declarations: Array<{ name: string; start: number; end: number }> = [];
+
+  for (const action of text.matchAll(/{{-?[\s\S]*?}}/g)) {
+    const actionStart = action.index ?? 0;
+    const raw = action[0];
+
+    for (const match of raw.matchAll(/(\$[A-Za-z_][A-Za-z0-9_]*)\s*:=/g)) {
+      const name = match[1] ?? "";
+      const start = actionStart + (match.index ?? 0);
+      declarations.push({
+        name,
+        start,
+        end: start + name.length,
+      });
+    }
+  }
+
+  return declarations;
+}
+
+function countTemplateVariableReferences(text: string, name: string): number {
+  return [...text.matchAll(new RegExp(`${escapeRegExp(name)}\\b`, "g"))].length;
+}
+
 function validatePartials(text: string, partialNames: string[]): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const known = new Set(partialNames);
@@ -377,4 +427,8 @@ function keywordSnippet(keyword: string): string {
   }
 
   return `${keyword} $1 }}$0{{ end`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
