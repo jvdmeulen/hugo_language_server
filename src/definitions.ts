@@ -24,12 +24,18 @@ export function getDefinition(
     return [];
   }
 
-  const shortcodeDefinition = getShortcodeDefinition(text, position, project.hugoRoot);
+  const shortcodeDefinition = getShortcodeDefinition(text, position, project.hugoRoot, project.themeRoots ?? []);
   if (shortcodeDefinition) {
     return [shortcodeDefinition];
   }
 
-  const partialDefinition = getPartialDefinition(text, position, project.hugoRoot, options.relativePath);
+  const partialDefinition = getPartialDefinition(
+    text,
+    position,
+    project.hugoRoot,
+    project.themeRoots ?? [],
+    options.relativePath,
+  );
   if (partialDefinition) {
     return [partialDefinition];
   }
@@ -134,6 +140,7 @@ function getShortcodeDefinition(
   text: string,
   position: Position,
   hugoRoot: string,
+  themeRoots: string[],
 ): Location | undefined {
   const offset = offsetAt(text, position);
 
@@ -148,7 +155,7 @@ function getShortcodeDefinition(
       continue;
     }
 
-    const targetPath = findNamedEntryPath(hugoRoot, "shortcodes", name);
+    const targetPath = findNamedEntryPath(hugoRoot, "shortcodes", name, themeRoots);
     if (!targetPath) {
       return undefined;
     }
@@ -166,6 +173,7 @@ function getPartialDefinition(
   text: string,
   position: Position,
   hugoRoot: string,
+  themeRoots: string[],
   relativePath?: string,
 ): Location | undefined {
   if (!relativePath?.startsWith("layouts/")) {
@@ -186,7 +194,7 @@ function getPartialDefinition(
       continue;
     }
 
-    const targetPath = findNamedEntryPath(hugoRoot, "partials", normalizedName);
+    const targetPath = findNamedEntryPath(hugoRoot, "partials", normalizedName, themeRoots);
     if (!targetPath) {
       return undefined;
     }

@@ -42,6 +42,7 @@ export interface CompletionRequestContext {
 export interface ProjectContext {
   workspaceRoot?: string;
   hugoRoot?: string;
+  themeRoots?: string[];
   isHugoProject: boolean;
   contentRoots: string[];
   shortcodeNames: string[];

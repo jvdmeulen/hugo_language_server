@@ -71,6 +71,31 @@ test("offers completion for project shortcode", () => {
   assert.ok(items.some((item) => item.label === "gallery"));
 });
 
+test("accepts shortcode from the configured theme", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-theme-shortcode-"));
+  const themeRoot = join(workspaceRoot, "themes", "demo-theme");
+  mkdirSync(join(themeRoot, "layouts", "shortcodes"), { recursive: true });
+  writeFileSync(join(workspaceRoot, "hugo.toml"), 'theme = "demo-theme"\n');
+  writeFileSync(join(themeRoot, "layouts", "shortcodes", "promo.html"), '{{ .Get "title" }}');
+
+  const diagnostics = analyzeDocument('{{< promo title="Hello" >}}', {
+    project: {
+      workspaceRoot,
+      hugoRoot: workspaceRoot,
+      themeRoots: [themeRoot],
+      isHugoProject: true,
+      contentRoots: [join(workspaceRoot, "content")],
+      shortcodeNames: ["promo"],
+      shortcodeParamNames: {
+        promo: ["title"],
+      },
+      partialNames: [],
+    },
+  }).diagnostics;
+
+  assert.equal(diagnostics.length, 0);
+});
+
 test("accepts known named shortcode params from project templates", () => {
   const diagnostics = analyzeDocument('{{< callout title="Hello" kind="info" >}}', {
     project: {

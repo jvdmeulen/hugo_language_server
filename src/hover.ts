@@ -17,6 +17,7 @@ import type { OfficialDocEntry } from "./officialDocs.js";
 import type { ProjectContext } from "./types.js";
 import { extractFrontMatter } from "./frontMatter.js";
 import { getOfficialDocEntriesForCandidates } from "./officialDocs.js";
+import { findNamedEntry } from "./project.js";
 import { offsetAt, rangeFromOffsets } from "./utils.js";
 
 export function getHover(
@@ -113,15 +114,28 @@ function getShortcodeHover(
 
     const doc = SHORTCODE_DOCS[name];
     const isProjectShortcode = project?.shortcodeNames.includes(name);
+    const projectShortcodeEntry = project?.hugoRoot
+      ? findNamedEntry(project.hugoRoot, "shortcodes", name, project.themeRoots ?? [])
+      : undefined;
     const description = doc?.summary ??
-      (isProjectShortcode
-        ? "Project shortcode detected in `layouts/shortcodes`."
+      (projectShortcodeEntry?.source === "theme"
+        ? `Theme shortcode detected in theme \`${projectShortcodeEntry.themeName ?? "unknown"}\`.`
+        : isProjectShortcode
+          ? "Project shortcode detected in `layouts/shortcodes`."
         : "Unknown shortcode. No matching built-in or project shortcode was found.");
     const source = doc
       ? "Source: built-in Hugo shortcode allowlist."
-      : isProjectShortcode
-        ? "Source: project shortcode under `layouts/shortcodes`."
+      : projectShortcodeEntry?.source === "theme"
+        ? `Source: theme shortcode under \`themes/${projectShortcodeEntry.themeName ?? "unknown"}/layouts/shortcodes\`.`
+        : isProjectShortcode
+          ? "Source: project shortcode under `layouts/shortcodes`."
         : "Source: not found in the current Hugo shortcode index.";
+    const location = projectShortcodeEntry
+      ? `Location: \`${projectShortcodeEntry.path}\``
+      : "";
+    const theme = projectShortcodeEntry?.source === "theme"
+      ? `Theme: \`${projectShortcodeEntry.themeName ?? "unknown"}\``
+      : "";
 
     return {
       range: rangeFromOffsets(text, nameStart, nameEnd),
@@ -130,6 +144,8 @@ function getShortcodeHover(
         description,
         doc ? `Usage:\n\`\`\`md\n${doc.usage}\n\`\`\`` : "",
         doc?.notes?.length ? `Notes:\n${doc.notes.map((note) => `- ${note}`).join("\n")}` : "",
+        theme,
+        location,
         source,
         "Since: not stated on the official Hugo docs page",
         "Docs: [Hugo shortcodes](https://gohugo.io/content-management/shortcodes/)",

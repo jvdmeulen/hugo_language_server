@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 import { getHover } from "../src/hover.js";
 
@@ -46,6 +49,32 @@ test("shows hover for project shortcodes", () => {
   assert.ok(hover?.contents);
   assert.match((hover?.contents as { value: string }).value, /Project shortcode detected/i);
   assert.match((hover?.contents as { value: string }).value, /Source: project shortcode/i);
+});
+
+test("shows hover location and theme name for theme shortcodes", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-theme-hover-"));
+  const themeRoot = join(workspaceRoot, "themes", "demo-theme");
+  mkdirSync(join(themeRoot, "layouts", "shortcodes"), { recursive: true });
+  writeFileSync(join(themeRoot, "layouts", "shortcodes", "promo.html"), "<div></div>");
+
+  const hover = getHover("{{< promo >}}", { line: 0, character: 5 }, {
+    project: {
+      workspaceRoot,
+      hugoRoot: workspaceRoot,
+      themeRoots: [themeRoot],
+      isHugoProject: true,
+      contentRoots: [join(workspaceRoot, "content")],
+      shortcodeNames: ["promo"],
+      partialNames: [],
+    },
+  });
+
+  assert.ok(hover?.contents);
+  const value = (hover?.contents as { value: string }).value;
+  assert.match(value, /Theme shortcode detected in theme `demo-theme`/i);
+  assert.match(value, /Theme: `demo-theme`/i);
+  assert.match(value, new RegExp(`Location: \`${themeRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/layouts/shortcodes/promo\\.html\``));
+  assert.match(value, /Source: theme shortcode under `themes\/demo-theme\/layouts\/shortcodes`/i);
 });
 
 test("shows clear hover for unknown shortcodes", () => {

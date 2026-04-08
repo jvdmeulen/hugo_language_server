@@ -46,6 +46,51 @@ test("jumps from partial usage to partial template", () => {
   assert.equal(locations[0]?.uri, pathToFileURL(join(workspaceRoot, "layouts", "partials", "shared", "hero.html")).toString());
 });
 
+test("jumps from markdown shortcode usage to theme shortcode template", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-theme-def-"));
+  const themeRoot = join(workspaceRoot, "themes", "demo-theme");
+  mkdirSync(join(themeRoot, "layouts", "shortcodes"), { recursive: true });
+  writeFileSync(join(workspaceRoot, "hugo.toml"), 'theme = "demo-theme"\n');
+  writeFileSync(join(themeRoot, "layouts", "shortcodes", "promo.html"), "<div></div>");
+
+  const locations = getDefinition("Before {{< promo >}} after", { line: 0, character: 12 }, {
+    project: {
+      workspaceRoot,
+      hugoRoot: workspaceRoot,
+      themeRoots: [themeRoot],
+      isHugoProject: true,
+      contentRoots: [join(workspaceRoot, "content")],
+      shortcodeNames: ["promo"],
+      partialNames: [],
+    },
+  });
+
+  assert.equal(locations[0]?.uri, pathToFileURL(join(themeRoot, "layouts", "shortcodes", "promo.html")).toString());
+});
+
+test("jumps from partial usage to theme partial template", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-theme-partial-def-"));
+  const themeRoot = join(workspaceRoot, "themes", "demo-theme");
+  mkdirSync(join(themeRoot, "layouts", "partials", "shared"), { recursive: true });
+  writeFileSync(join(workspaceRoot, "hugo.toml"), 'theme = "demo-theme"\n');
+  writeFileSync(join(themeRoot, "layouts", "partials", "shared", "hero.html"), "<div></div>");
+
+  const locations = getDefinition('{{ partial "shared/hero.html" . }}', { line: 0, character: 16 }, {
+    project: {
+      workspaceRoot,
+      hugoRoot: workspaceRoot,
+      themeRoots: [themeRoot],
+      isHugoProject: true,
+      contentRoots: [join(workspaceRoot, "content")],
+      shortcodeNames: [],
+      partialNames: ["shared/hero"],
+    },
+    relativePath: "layouts/_default/single.html",
+  });
+
+  assert.equal(locations[0]?.uri, pathToFileURL(join(themeRoot, "layouts", "partials", "shared", "hero.html")).toString());
+});
+
 test("jumps from template variable usage to declaration", () => {
   const uri = "file:///tmp/demo/layouts/shortcodes/callout.html";
   const locations = getDefinition('{{ $title := .Get "title" }}<h1>{{ $title }}</h1>', { line: 0, character: 36 }, {

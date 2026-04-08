@@ -45,16 +45,18 @@ export function resolveProjectContext(
     matchedWorkspaceHugoRoot ??
     (workspaceRoot ? detectHugoRoot(workspaceRoot) : filePath ? findProjectRoot(dirname(filePath)) : undefined);
   const contentRoots = hugoRoot ? getContentRoots(hugoRoot) : [];
+  const themeRoots = hugoRoot ? getThemeRoots(hugoRoot) : [];
 
   return {
     workspaceRoot: matchedWorkspaceHugoRoot ?? workspaceRoot,
     hugoRoot,
+    themeRoots,
     isHugoProject: Boolean(hugoRoot),
     contentRoots,
-    shortcodeNames: hugoRoot ? getKnownEntries(join(hugoRoot, "layouts", "shortcodes")) : [],
-    shortcodeParamNames: hugoRoot ? getShortcodeParamNames(hugoRoot) : {},
-    partialNames: hugoRoot ? getKnownEntries(join(hugoRoot, "layouts", "partials")) : [],
-    templateParamNames: hugoRoot ? getTemplateParamNames(hugoRoot) : [],
+    shortcodeNames: hugoRoot ? getKnownEntries(getLayoutDirectories(hugoRoot, themeRoots, "shortcodes")) : [],
+    shortcodeParamNames: hugoRoot ? getShortcodeParamNames(hugoRoot, themeRoots) : {},
+    partialNames: hugoRoot ? getKnownEntries(getLayoutDirectories(hugoRoot, themeRoots, "partials")) : [],
+    templateParamNames: hugoRoot ? getTemplateParamNames(hugoRoot, themeRoots) : [],
   };
 }
 
@@ -67,15 +69,31 @@ export function isContentFile(filePath: string, context: ProjectContext): boolea
 }
 
 export function isTemplateFile(filePath: string, context: ProjectContext): boolean {
-  if (!context.hugoRoot || !filePath.endsWith(".html")) {
+  if (!filePath.endsWith(".html")) {
     return false;
   }
 
-  const layoutsRoot = join(context.hugoRoot, "layouts");
-  return filePath === layoutsRoot || filePath.startsWith(`${layoutsRoot}/`);
+  const layoutRoots = [
+    ...(context.hugoRoot ? [join(context.hugoRoot, "layouts")] : []),
+    ...((context.themeRoots ?? []).map((themeRoot) => join(themeRoot, "layouts"))),
+  ];
+
+  return layoutRoots.some((layoutsRoot) => filePath === layoutsRoot || filePath.startsWith(`${layoutsRoot}/`));
 }
 
 export function getRelativeProjectPath(filePath: string, context: ProjectContext): string | undefined {
+  const projectLayoutsRoot = context.hugoRoot ? join(context.hugoRoot, "layouts") : undefined;
+  if (projectLayoutsRoot && (filePath === projectLayoutsRoot || filePath.startsWith(`${projectLayoutsRoot}/`))) {
+    return relative(context.hugoRoot!, filePath);
+  }
+
+  for (const themeRoot of context.themeRoots ?? []) {
+    const themeLayoutsRoot = join(themeRoot, "layouts");
+    if (filePath === themeLayoutsRoot || filePath.startsWith(`${themeLayoutsRoot}/`)) {
+      return relative(themeRoot, filePath);
+    }
+  }
+
   if (!context.hugoRoot) {
     return undefined;
   }
@@ -87,44 +105,79 @@ export function findNamedEntryPath(
   hugoRoot: string,
   kind: "partials" | "shortcodes",
   name: string,
+  themeRoots: string[] = [],
 ): string | undefined {
-  const directory = join(hugoRoot, "layouts", kind);
-  if (!existsSync(directory)) {
-    return undefined;
-  }
-
-  return findEntryByName(directory, normalizeEntryName(name));
+  return findNamedEntry(hugoRoot, kind, name, themeRoots)?.path;
 }
 
-function getKnownEntries(directory: string): string[] {
-  if (!existsSync(directory)) {
-    return [];
+export function findNamedEntry(
+  hugoRoot: string,
+  kind: "partials" | "shortcodes",
+  name: string,
+  themeRoots: string[] = [],
+): { path: string; source: "project" | "theme"; themeName?: string } | undefined {
+  const normalizedName = normalizeEntryName(name);
+
+  for (const root of [hugoRoot, ...themeRoots]) {
+    const directory = join(root, "layouts", kind);
+    if (!existsSync(directory)) {
+      continue;
+    }
+
+    const path = findEntryByName(directory, normalizedName);
+    if (path) {
+      if (root === hugoRoot) {
+        return { path, source: "project" };
+      }
+
+      return {
+        path,
+        source: "theme",
+        themeName: root.split("/").at(-1),
+      };
+    }
   }
 
+  return undefined;
+}
+
+function getKnownEntries(directories: string[]): string[] {
   const names = new Set<string>();
-  collectEntries(directory, names);
+  for (const directory of directories) {
+    if (!existsSync(directory)) {
+      continue;
+    }
+
+    collectEntries(directory, names);
+  }
+
   return [...names].sort();
 }
 
-function getTemplateParamNames(hugoRoot: string): string[] {
-  const layoutsRoot = join(hugoRoot, "layouts");
-  if (!existsSync(layoutsRoot)) {
-    return [];
+function getTemplateParamNames(hugoRoot: string, themeRoots: string[]): string[] {
+  const names = new Set<string>();
+  for (const layoutsRoot of getLayoutDirectories(hugoRoot, themeRoots)) {
+    if (!existsSync(layoutsRoot)) {
+      continue;
+    }
+
+    collectTemplateParamNames(layoutsRoot, names);
   }
 
-  const names = new Set<string>();
-  collectTemplateParamNames(layoutsRoot, names);
   return [...names].sort();
 }
 
-function getShortcodeParamNames(hugoRoot: string): Record<string, string[]> {
-  const shortcodesRoot = join(hugoRoot, "layouts", "shortcodes");
-  if (!existsSync(shortcodesRoot)) {
-    return {};
-  }
-
+function getShortcodeParamNames(hugoRoot: string, themeRoots: string[]): Record<string, string[]> {
   const result: Record<string, string[]> = {};
-  collectShortcodeParamNames(shortcodesRoot, result);
+
+  for (const shortcodesRoot of getLayoutDirectories(hugoRoot, themeRoots, "shortcodes")) {
+    if (!existsSync(shortcodesRoot)) {
+      continue;
+    }
+
+    collectShortcodeParamNames(shortcodesRoot, result);
+  }
+
   return result;
 }
 
@@ -213,6 +266,54 @@ function extractTemplateParamNames(content: string): string[] {
 
 function normalizeParamName(name: string): string {
   return name.trim().toLowerCase();
+}
+
+function getThemeRoots(hugoRoot: string): string[] {
+  return getConfiguredThemes(hugoRoot)
+    .map((themeName) => join(hugoRoot, "themes", themeName))
+    .filter((themeRoot) => existsSync(themeRoot));
+}
+
+function getConfiguredThemes(hugoRoot: string): string[] {
+  const values = new Set<string>();
+
+  for (const configName of HUGO_CONFIG_NAMES) {
+    const configPath = join(hugoRoot, configName);
+    if (!existsSync(configPath)) {
+      continue;
+    }
+
+    const parsed = parseConfigFile(configPath);
+    for (const themeName of getStringArrayValue(parsed, "theme")) {
+      values.add(themeName);
+    }
+  }
+
+  const defaultConfigDir = join(hugoRoot, "config", "_default");
+  if (existsSync(defaultConfigDir)) {
+    for (const entry of readdirSync(defaultConfigDir, { withFileTypes: true })) {
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const parsed = parseConfigFile(join(defaultConfigDir, entry.name));
+      for (const themeName of getStringArrayValue(parsed, "theme")) {
+        values.add(themeName);
+      }
+    }
+  }
+
+  return [...values];
+}
+
+function getLayoutDirectories(
+  hugoRoot: string,
+  themeRoots: string[],
+  kind?: "partials" | "shortcodes",
+  options?: { projectFirst?: boolean },
+): string[] {
+  const roots = options?.projectFirst ? [hugoRoot, ...themeRoots] : [...themeRoots, hugoRoot];
+  return roots.map((root) => (kind ? join(root, "layouts", kind) : join(root, "layouts")));
 }
 
 function collectEntries(directory: string, names: Set<string>, prefix = ""): void {
@@ -398,6 +499,24 @@ function getStringValue(value: unknown, key: string): string | undefined {
   }
 
   return undefined;
+}
+
+function getStringArrayValue(value: unknown, key: string): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+
+  const record = value as Record<string, unknown>;
+  const direct = record[key];
+  if (typeof direct === "string") {
+    return [direct];
+  }
+
+  if (Array.isArray(direct)) {
+    return direct.filter((entry): entry is string => typeof entry === "string");
+  }
+
+  return [];
 }
 
 function findProjectRoot(startDirectory: string): string | undefined {

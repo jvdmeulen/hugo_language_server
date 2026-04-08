@@ -49,6 +49,30 @@ test("scans named shortcode params from shortcode templates", () => {
   assert.deepEqual(context.shortcodeParamNames?.["cards/callout"], ["kind", "title"]);
 });
 
+test("includes theme shortcodes, partials, and template params from the configured theme", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-theme-"));
+  const themeRoot = join(workspaceRoot, "themes", "demo-theme");
+  mkdirSync(join(workspaceRoot, "content"), { recursive: true });
+  mkdirSync(join(themeRoot, "layouts", "shortcodes"), { recursive: true });
+  mkdirSync(join(themeRoot, "layouts", "partials", "shared"), { recursive: true });
+  mkdirSync(join(themeRoot, "layouts", "_default"), { recursive: true });
+  writeFileSync(join(workspaceRoot, "hugo.toml"), 'theme = "demo-theme"\n');
+  writeFileSync(
+    join(themeRoot, "layouts", "shortcodes", "promo.html"),
+    '{{ .Get "title" }} {{ .Get "variant" }}',
+  );
+  writeFileSync(join(themeRoot, "layouts", "partials", "shared", "hero.html"), "<div></div>");
+  writeFileSync(join(themeRoot, "layouts", "_default", "single.html"), "{{ .Params.heroImage }}");
+
+  const context = resolveProjectContext(`file://${join(workspaceRoot, "content", "post.md")}`, [workspaceRoot]);
+
+  assert.deepEqual(context.themeRoots, [themeRoot]);
+  assert.ok(context.shortcodeNames.includes("promo"));
+  assert.deepEqual(context.shortcodeParamNames?.promo, ["title", "variant"]);
+  assert.ok(context.partialNames.includes("shared/hero"));
+  assert.ok(context.templateParamNames?.includes("heroimage"));
+});
+
 test("scans template params from layouts", () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-params-"));
   mkdirSync(join(workspaceRoot, "content"), { recursive: true });
@@ -346,5 +370,18 @@ test("computes relative project path for templates", () => {
 
   const context = resolveProjectContext(`file://${join(workspaceRoot, "layouts", "_default", "single.html")}`, [workspaceRoot]);
   const relativePath = getRelativeProjectPath(join(workspaceRoot, "layouts", "_default", "single.html"), context);
+  assert.equal(relativePath, "layouts/_default/single.html");
+});
+
+test("treats theme templates as project templates for relative paths", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-theme-relative-"));
+  const themeRoot = join(workspaceRoot, "themes", "demo-theme");
+  mkdirSync(join(themeRoot, "layouts", "_default"), { recursive: true });
+  writeFileSync(join(workspaceRoot, "hugo.toml"), 'theme = "demo-theme"\n');
+
+  const templatePath = join(themeRoot, "layouts", "_default", "single.html");
+  const context = resolveProjectContext(`file://${templatePath}`, [workspaceRoot]);
+  const relativePath = getRelativeProjectPath(templatePath, context);
+
   assert.equal(relativePath, "layouts/_default/single.html");
 });
