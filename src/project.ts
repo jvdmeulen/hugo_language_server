@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import TOML from "@iarna/toml";
@@ -22,10 +22,12 @@ export function resolveWorkspaceRoot(
 ): string | undefined {
   const filePath = uriToFilePath(documentUri);
   if (!filePath) {
-    return workspaceRoots[0];
+    return workspaceRoots[0] ? normalizePath(workspaceRoots[0]) : undefined;
   }
 
-  const matchingRoot = workspaceRoots
+  const normalizedWorkspaceRoots = workspaceRoots.map((root) => normalizePath(root));
+
+  const matchingRoot = normalizedWorkspaceRoots
     .filter((root) => filePath === root || filePath.startsWith(`${root}/`))
     .sort((left, right) => right.length - left.length)[0];
 
@@ -61,15 +63,17 @@ export function resolveProjectContext(
 }
 
 export function isContentFile(filePath: string, context: ProjectContext): boolean {
+  const normalizedFilePath = normalizePath(filePath);
   if (!context.isHugoProject || context.contentRoots.length === 0) {
-    return filePath.endsWith(".md");
+    return normalizedFilePath.endsWith(".md");
   }
 
-  return context.contentRoots.some((root) => filePath === root || filePath.startsWith(`${root}/`));
+  return context.contentRoots.some((root) => normalizedFilePath === root || normalizedFilePath.startsWith(`${root}/`));
 }
 
 export function isTemplateFile(filePath: string, context: ProjectContext): boolean {
-  if (!filePath.endsWith(".html")) {
+  const normalizedFilePath = normalizePath(filePath);
+  if (!normalizedFilePath.endsWith(".html")) {
     return false;
   }
 
@@ -78,19 +82,20 @@ export function isTemplateFile(filePath: string, context: ProjectContext): boole
     ...((context.themeRoots ?? []).map((themeRoot) => join(themeRoot, "layouts"))),
   ];
 
-  return layoutRoots.some((layoutsRoot) => filePath === layoutsRoot || filePath.startsWith(`${layoutsRoot}/`));
+  return layoutRoots.some((layoutsRoot) => normalizedFilePath === layoutsRoot || normalizedFilePath.startsWith(`${layoutsRoot}/`));
 }
 
 export function getRelativeProjectPath(filePath: string, context: ProjectContext): string | undefined {
+  const normalizedFilePath = normalizePath(filePath);
   const projectLayoutsRoot = context.hugoRoot ? join(context.hugoRoot, "layouts") : undefined;
-  if (projectLayoutsRoot && (filePath === projectLayoutsRoot || filePath.startsWith(`${projectLayoutsRoot}/`))) {
-    return relative(context.hugoRoot!, filePath);
+  if (projectLayoutsRoot && (normalizedFilePath === projectLayoutsRoot || normalizedFilePath.startsWith(`${projectLayoutsRoot}/`))) {
+    return relative(context.hugoRoot!, normalizedFilePath);
   }
 
   for (const themeRoot of context.themeRoots ?? []) {
     const themeLayoutsRoot = join(themeRoot, "layouts");
-    if (filePath === themeLayoutsRoot || filePath.startsWith(`${themeLayoutsRoot}/`)) {
-      return relative(themeRoot, filePath);
+    if (normalizedFilePath === themeLayoutsRoot || normalizedFilePath.startsWith(`${themeLayoutsRoot}/`)) {
+      return relative(themeRoot, normalizedFilePath);
     }
   }
 
@@ -98,7 +103,7 @@ export function getRelativeProjectPath(filePath: string, context: ProjectContext
     return undefined;
   }
 
-  return relative(context.hugoRoot, filePath);
+  return relative(context.hugoRoot, normalizedFilePath);
 }
 
 export function findNamedEntryPath(
@@ -271,7 +276,8 @@ function normalizeParamName(name: string): string {
 function getThemeRoots(hugoRoot: string): string[] {
   return getConfiguredThemes(hugoRoot)
     .map((themeName) => join(hugoRoot, "themes", themeName))
-    .filter((themeRoot) => existsSync(themeRoot));
+    .filter((themeRoot) => existsSync(themeRoot))
+    .map((themeRoot) => normalizePath(themeRoot));
 }
 
 function getConfiguredThemes(hugoRoot: string): string[] {
@@ -400,7 +406,7 @@ function findWorkspaceHugoRootForFile(
   workspaceRoots: string[],
 ): string | undefined {
   for (const workspaceRoot of workspaceRoots) {
-    const hugoRoot = detectHugoRoot(workspaceRoot);
+    const hugoRoot = detectHugoRoot(normalizePath(workspaceRoot));
     if (!hugoRoot) {
       continue;
     }
@@ -430,7 +436,7 @@ function isHugoDirectory(directory: string): boolean {
 function getContentRoots(hugoRoot: string): string[] {
   const configuredContentDir = readConfiguredContentDir(hugoRoot);
   const contentDir = configuredContentDir ? resolve(hugoRoot, configuredContentDir) : join(hugoRoot, "content");
-  return [contentDir];
+  return [normalizePath(contentDir)];
 }
 
 function readConfiguredContentDir(hugoRoot: string): string | undefined {
@@ -523,7 +529,7 @@ function findProjectRoot(startDirectory: string): string | undefined {
   let current = startDirectory;
 
   while (true) {
-    if (ROOT_MARKERS.some((marker) => existsSync(join(current, marker)))) {
+    if (isHugoDirectory(current)) {
       return current;
     }
 
@@ -551,9 +557,14 @@ function uriToFilePath(uri: string): string | undefined {
 
 function normalizePath(path: string): string {
   try {
-    return statSync(path).isDirectory() ? path.replace(/\/$/, "") : path;
+    const normalized = realpathSync(path);
+    return statSync(normalized).isDirectory() ? normalized.replace(/\/$/, "") : normalized;
   } catch {
-    return path.replace(/\/$/, "");
+    try {
+      return statSync(path).isDirectory() ? path.replace(/\/$/, "") : path;
+    } catch {
+      return path.replace(/\/$/, "");
+    }
   }
 }
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -9,18 +9,21 @@ import { resolveProjectContext, getRelativeProjectPath } from "../src/project.js
 
 test("detects Hugo root and custom contentDir", () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-"));
+  const normalizedWorkspaceRoot = realpathSync(workspaceRoot);
   mkdirSync(join(workspaceRoot, "config", "_default"), { recursive: true });
   writeFileSync(join(workspaceRoot, "config", "_default", "hugo.toml"), 'contentDir = "docs"\n');
   mkdirSync(join(workspaceRoot, "docs"), { recursive: true });
 
   const context = resolveProjectContext(`file://${join(workspaceRoot, "docs", "post.md")}`, [workspaceRoot]);
   assert.equal(context.isHugoProject, true);
-  assert.equal(context.contentRoots[0], join(workspaceRoot, "docs"));
+  assert.equal(context.contentRoots[0], join(normalizedWorkspaceRoot, "docs"));
 });
 
 test("matches external contentDir back to the Hugo root", () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-root-"));
+  const normalizedWorkspaceRoot = realpathSync(workspaceRoot);
   const externalContentRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-content-"));
+  const normalizedExternalContentRoot = realpathSync(externalContentRoot);
 
   writeFileSync(join(workspaceRoot, "config.toml"), `contentDir = "${externalContentRoot}"\n`);
   mkdirSync(join(workspaceRoot, "layouts", "shortcodes"), { recursive: true });
@@ -29,8 +32,30 @@ test("matches external contentDir back to the Hugo root", () => {
 
   const context = resolveProjectContext(`file://${join(externalContentRoot, "post.md")}`, [workspaceRoot]);
 
-  assert.equal(context.hugoRoot, workspaceRoot);
+  assert.equal(context.hugoRoot, normalizedWorkspaceRoot);
   assert.equal(context.isHugoProject, true);
+  assert.equal(context.contentRoots[0], normalizedExternalContentRoot);
+  assert.ok(context.shortcodeNames.includes("callout"));
+});
+
+test("matches a symlinked contentDir back to the Hugo root", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-symlink-root-"));
+  const normalizedWorkspaceRoot = realpathSync(workspaceRoot);
+  const externalContentRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-symlink-content-"));
+  const normalizedExternalContentRoot = realpathSync(externalContentRoot);
+  const symlinkedContentRoot = join(workspaceRoot, "content-link");
+
+  symlinkSync(externalContentRoot, symlinkedContentRoot);
+  writeFileSync(join(workspaceRoot, "config.toml"), 'contentDir = "content-link"\n');
+  mkdirSync(join(workspaceRoot, "layouts", "shortcodes"), { recursive: true });
+  writeFileSync(join(workspaceRoot, "layouts", "shortcodes", "callout.html"), "<div></div>");
+  writeFileSync(join(externalContentRoot, "post.md"), "{{< callout >}}\n");
+
+  const context = resolveProjectContext(`file://${join(externalContentRoot, "post.md")}`, [workspaceRoot]);
+
+  assert.equal(context.hugoRoot, normalizedWorkspaceRoot);
+  assert.equal(context.isHugoProject, true);
+  assert.equal(context.contentRoots[0], normalizedExternalContentRoot);
   assert.ok(context.shortcodeNames.includes("callout"));
 });
 
@@ -56,6 +81,7 @@ test("includes theme shortcodes, partials, and template params from the configur
   mkdirSync(join(themeRoot, "layouts", "shortcodes"), { recursive: true });
   mkdirSync(join(themeRoot, "layouts", "partials", "shared"), { recursive: true });
   mkdirSync(join(themeRoot, "layouts", "_default"), { recursive: true });
+  const normalizedThemeRoot = realpathSync(themeRoot);
   writeFileSync(join(workspaceRoot, "hugo.toml"), 'theme = "demo-theme"\n');
   writeFileSync(
     join(themeRoot, "layouts", "shortcodes", "promo.html"),
@@ -66,7 +92,7 @@ test("includes theme shortcodes, partials, and template params from the configur
 
   const context = resolveProjectContext(`file://${join(workspaceRoot, "content", "post.md")}`, [workspaceRoot]);
 
-  assert.deepEqual(context.themeRoots, [themeRoot]);
+  assert.deepEqual(context.themeRoots, [normalizedThemeRoot]);
   assert.ok(context.shortcodeNames.includes("promo"));
   assert.deepEqual(context.shortcodeParamNames?.promo, ["title", "variant"]);
   assert.ok(context.partialNames.includes("shared/hero"));
