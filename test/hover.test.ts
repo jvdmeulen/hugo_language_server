@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -113,6 +113,90 @@ test("shows hover for partial calls", () => {
   assert.ok(hover?.contents);
   assert.match((hover?.contents as { value: string }).value, /Hugo partial.*`shared\/hero`/);
   assert.match((hover?.contents as { value: string }).value, /found in this project/i);
+});
+
+test("shows hover value for site params from config", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-site-param-hover-"));
+  const normalizedWorkspaceRoot = realpathSync(workspaceRoot);
+  mkdirSync(join(workspaceRoot, "layouts", "_default"), { recursive: true });
+  writeFileSync(
+    join(workspaceRoot, "config.toml"),
+    'baseURL = "https://example.org"\n[params]\npromotedOnRubriek = "nieuws"\n',
+  );
+
+  const hover = getHover("{{ site.Params.promotedOnRubriek }}", { line: 0, character: 16 }, {
+    project: {
+      workspaceRoot,
+      hugoRoot: normalizedWorkspaceRoot,
+      isHugoProject: true,
+      contentRoots: [join(normalizedWorkspaceRoot, "content")],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/list.html",
+  });
+
+  assert.ok(hover?.contents);
+  const value = (hover?.contents as { value: string }).value;
+  assert.match(value, /Hugo site param:\*\* `site\.Params\.promotedOnRubriek`|Hugo site param.*`site\.Params\.promotedOnRubriek`/i);
+  assert.match(value, /Resolved parameter path: `params\.promotedOnRubriek`/i);
+  assert.match(value, /Value:/i);
+  assert.match(value, /nieuws/i);
+  assert.match(value, /Location: `.*config\.toml`/i);
+});
+
+test("shows hover value for site params from uppercase Params config section", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-site-param-hover-upper-"));
+  const normalizedWorkspaceRoot = realpathSync(workspaceRoot);
+  mkdirSync(join(workspaceRoot, "layouts", "_default"), { recursive: true });
+  writeFileSync(
+    join(workspaceRoot, "config.toml"),
+    'baseURL = "https://example.org"\n[Params]\ndefaultPagesPerPaginate = 20\n',
+  );
+
+  const hover = getHover("{{ .Site.Params.defaultPagesPerPaginate }}", { line: 0, character: 16 }, {
+    project: {
+      workspaceRoot,
+      hugoRoot: normalizedWorkspaceRoot,
+      isHugoProject: true,
+      contentRoots: [join(normalizedWorkspaceRoot, "content")],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/list.html",
+  });
+
+  assert.ok(hover?.contents);
+  const value = (hover?.contents as { value: string }).value;
+  assert.match(value, /defaultPagesPerPaginate/i);
+  assert.match(value, /20/);
+});
+
+test("shows hover value for site params from root context", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-site-param-hover-root-"));
+  const normalizedWorkspaceRoot = realpathSync(workspaceRoot);
+  mkdirSync(join(workspaceRoot, "layouts", "_default"), { recursive: true });
+  writeFileSync(
+    join(workspaceRoot, "config.toml"),
+    'baseURL = "https://example.org"\n[Params]\narticle_images = true\n',
+  );
+
+  const hover = getHover("{{ $.Site.Params.article_images }}", { line: 0, character: 18 }, {
+    project: {
+      workspaceRoot,
+      hugoRoot: normalizedWorkspaceRoot,
+      isHugoProject: true,
+      contentRoots: [join(normalizedWorkspaceRoot, "content")],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/list.html",
+  });
+
+  assert.ok(hover?.contents);
+  const value = (hover?.contents as { value: string }).value;
+  assert.match(value, /article_images/i);
+  assert.match(value, /true/i);
 });
 
 test("shows hover for template keywords and functions", () => {

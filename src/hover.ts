@@ -17,7 +17,7 @@ import type { OfficialDocEntry } from "./officialDocs.js";
 import type { ProjectContext } from "./types.js";
 import { extractFrontMatter } from "./frontMatter.js";
 import { getOfficialDocEntriesForCandidates } from "./officialDocs.js";
-import { findNamedEntry } from "./project.js";
+import { findNamedEntry, findSiteParamConfigValue } from "./project.js";
 import { offsetAt, rangeFromOffsets } from "./utils.js";
 
 export function getHover(
@@ -162,12 +162,74 @@ function getTemplateHover(
   project?: ProjectContext,
   relativePath?: string,
 ): Hover | null {
+  const siteParamHover = getSiteParamHover(text, position, project);
+  if (siteParamHover) {
+    return siteParamHover;
+  }
+
   const partialHover = getPartialHover(text, position, project);
   if (partialHover) {
     return partialHover;
   }
 
   return getActionTokenHover(text, position, relativePath);
+}
+
+function getSiteParamHover(
+  text: string,
+  position: Position,
+  project?: ProjectContext,
+): Hover | null {
+  if (!project?.hugoRoot) {
+    return null;
+  }
+
+  const offset = offsetAt(text, position);
+
+  for (const action of text.matchAll(/{{-?[\s\S]*?}}/g)) {
+    const raw = action[0];
+    const actionStart = action.index ?? 0;
+    const actionEnd = actionStart + raw.length;
+
+    if (offset < actionStart || offset > actionEnd) {
+      continue;
+    }
+
+    const bodyOffset = raw.startsWith("{{-") ? 3 : 2;
+    const bodyStart = actionStart + bodyOffset;
+    const body = raw.slice(bodyOffset, raw.length - 2);
+
+    for (const tokenMatch of body.matchAll(/(^|[\s(|])((?:site|\.Site|\$\.Site)\.Params(?:\.[A-Za-z0-9_-]+)+)\b/g)) {
+      const token = tokenMatch[2] ?? "";
+      const tokenStart = bodyStart + (tokenMatch.index ?? 0) + (tokenMatch[1]?.length ?? 0);
+      const tokenEnd = tokenStart + token.length;
+
+      if (offset < tokenStart || offset > tokenEnd) {
+        continue;
+      }
+
+      const paramPath = token.replace(/^(?:site|\.Site|\$\.Site)\.Params\./, "");
+      const match = findSiteParamConfigValue(project.hugoRoot, paramPath);
+      if (!match) {
+        return null;
+      }
+
+      return {
+        range: rangeFromOffsets(text, tokenStart, tokenEnd),
+        contents: markdown([
+          `**Hugo site param:** \`${token}\``,
+          `Resolved parameter path: \`params.${match.paramPath}\``,
+          `Value:\n\`\`\`\n${formatConfigValue(match.value)}\n\`\`\``,
+          `Location: \`${match.path}\``,
+          "Source: Hugo site configuration.",
+          "Since: not stated on the official Hugo docs page",
+          "Docs: [Hugo configuration](https://gohugo.io/getting-started/configuration/)",
+        ]),
+      };
+    }
+  }
+
+  return null;
 }
 
 function getPartialHover(
@@ -215,6 +277,18 @@ function markdown(parts: string[]): MarkupContent {
     kind: "markdown",
     value: parts.filter(Boolean).join("\n\n"),
   };
+}
+
+function formatConfigValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return JSON.stringify(value, null, 2) ?? String(value);
 }
 
 function getActionTokenHover(

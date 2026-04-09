@@ -16,6 +16,14 @@ const ROOT_MARKERS = [
 
 const HUGO_CONFIG_NAMES = ["hugo.toml", "hugo.yaml", "hugo.yml", "config.toml"];
 
+export interface ConfigParamMatch {
+  path: string;
+  paramPath: string;
+  value: unknown;
+  startOffset: number;
+  endOffset: number;
+}
+
 export function resolveWorkspaceRoot(
   documentUri: string,
   workspaceRoots: string[],
@@ -146,6 +154,42 @@ export function findNamedEntry(
   return undefined;
 }
 
+export function findSiteParamConfigValue(
+  hugoRoot: string,
+  paramPath: string,
+): ConfigParamMatch | undefined {
+  const normalizedParamPath = normalizeConfigParamPath(paramPath);
+  let resolvedMatch: ConfigParamMatch | undefined;
+
+  for (const configPath of getConfigFilePaths(hugoRoot)) {
+    const parsed = parseConfigFile(configPath);
+    const value = getNestedValueCaseInsensitive(parsed, ["params", ...normalizedParamPath.split(".")]);
+    if (value === undefined) {
+      continue;
+    }
+
+    const raw = readFileSync(configPath, "utf8");
+    const location =
+      extname(configPath) === ".toml"
+        ? findTomlParamLocation(raw, normalizedParamPath)
+        : findYamlParamLocation(raw, normalizedParamPath);
+
+    if (!location) {
+      continue;
+    }
+
+    resolvedMatch = {
+      path: configPath,
+      paramPath: normalizedParamPath,
+      value,
+      startOffset: location.startOffset,
+      endOffset: location.endOffset,
+    };
+  }
+
+  return resolvedMatch;
+}
+
 function getKnownEntries(directories: string[]): string[] {
   const names = new Set<string>();
   for (const directory of directories) {
@@ -157,6 +201,28 @@ function getKnownEntries(directories: string[]): string[] {
   }
 
   return [...names].sort();
+}
+
+function getConfigFilePaths(hugoRoot: string): string[] {
+  const paths: string[] = [];
+
+  for (const configName of HUGO_CONFIG_NAMES) {
+    const configPath = join(hugoRoot, configName);
+    if (existsSync(configPath)) {
+      paths.push(normalizePath(configPath));
+    }
+  }
+
+  const defaultConfigDir = join(hugoRoot, "config", "_default");
+  if (existsSync(defaultConfigDir)) {
+    const entries = readdirSync(defaultConfigDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => normalizePath(join(defaultConfigDir, entry.name)))
+      .sort();
+    paths.push(...entries);
+  }
+
+  return [...new Set(paths)];
 }
 
 function getTemplateParamNames(hugoRoot: string, themeRoots: string[]): string[] {
@@ -525,6 +591,40 @@ function getStringArrayValue(value: unknown, key: string): string[] {
   return [];
 }
 
+function getNestedValue(value: unknown, path: string[]): unknown {
+  let current: unknown = value;
+
+  for (const segment of path) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      return undefined;
+    }
+
+    current = (current as Record<string, unknown>)[segment];
+  }
+
+  return current;
+}
+
+function getNestedValueCaseInsensitive(value: unknown, path: string[]): unknown {
+  let current: unknown = value;
+
+  for (const segment of path) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      return undefined;
+    }
+
+    const record = current as Record<string, unknown>;
+    const direct = Object.entries(record).find(([key]) => key.toLowerCase() === segment.toLowerCase());
+    if (!direct) {
+      return undefined;
+    }
+
+    current = direct[1];
+  }
+
+  return current;
+}
+
 function findProjectRoot(startDirectory: string): string | undefined {
   let current = startDirectory;
 
@@ -566,6 +666,129 @@ function normalizePath(path: string): string {
       return path.replace(/\/$/, "");
     }
   }
+}
+
+function normalizeConfigParamPath(path: string): string {
+  return path
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join(".");
+}
+
+function findTomlParamLocation(
+  text: string,
+  paramPath: string,
+): { startOffset: number; endOffset: number } | undefined {
+  const lines = text.split("\n");
+  let offset = 0;
+  let currentParamsPrefix: string | undefined;
+
+  for (const line of lines) {
+    const sectionMatch = line.match(/^\s*\[([^\]]+)\]\s*$/);
+    if (sectionMatch) {
+      const sectionPath = normalizeTomlPath(sectionMatch[1] ?? "").toLowerCase();
+      currentParamsPrefix = sectionPath === "params"
+        ? ""
+        : sectionPath.startsWith("params.")
+          ? sectionPath.slice("params.".length)
+          : undefined;
+      offset += line.length + 1;
+      continue;
+    }
+
+    const keyMatch = line.match(/^(\s*)([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\s*=/);
+    if (keyMatch) {
+      const rawKeyPath = normalizeTomlPath(keyMatch[2] ?? "");
+      const normalizedKeyPath = rawKeyPath.toLowerCase();
+      const fullPath = normalizedKeyPath === "params"
+        ? ""
+        : normalizedKeyPath.startsWith("params.")
+          ? normalizedKeyPath.slice("params.".length)
+          : currentParamsPrefix !== undefined
+            ? [currentParamsPrefix, normalizedKeyPath].filter(Boolean).join(".")
+            : undefined;
+
+      if (fullPath === paramPath.toLowerCase()) {
+        const keyStart = offset + (keyMatch[1]?.length ?? 0);
+        return {
+          startOffset: keyStart,
+          endOffset: keyStart + (keyMatch[2]?.length ?? 0),
+        };
+      }
+    }
+
+    offset += line.length + 1;
+  }
+
+  return undefined;
+}
+
+function findYamlParamLocation(
+  text: string,
+  paramPath: string,
+): { startOffset: number; endOffset: number } | undefined {
+  const lines = text.split("\n");
+  let offset = 0;
+  let inParams = false;
+  let paramsIndent = -1;
+  const stack: Array<{ indent: number; key: string }> = [];
+
+  for (const line of lines) {
+    const keyMatch = line.match(/^(\s*)([A-Za-z0-9_-]+)\s*:/);
+    if (!keyMatch) {
+      offset += line.length + 1;
+      continue;
+    }
+
+    const indent = keyMatch[1]?.length ?? 0;
+    const key = keyMatch[2] ?? "";
+    const normalizedKey = key.toLowerCase();
+
+    if (!inParams) {
+      if (indent === 0 && normalizedKey === "params") {
+        inParams = true;
+        paramsIndent = indent;
+        stack.length = 0;
+      }
+      offset += line.length + 1;
+      continue;
+    }
+
+    if (indent <= paramsIndent) {
+      inParams = indent === 0 && normalizedKey === "params";
+      paramsIndent = inParams ? indent : -1;
+      stack.length = 0;
+      offset += line.length + 1;
+      continue;
+    }
+
+    while (stack.length > 0 && (stack[stack.length - 1]?.indent ?? 0) >= indent) {
+      stack.pop();
+    }
+
+    const fullPath = [...stack.map((entry) => entry.key), normalizedKey].join(".");
+    if (fullPath === paramPath.toLowerCase()) {
+      const keyStart = offset + indent;
+      return {
+        startOffset: keyStart,
+        endOffset: keyStart + key.length,
+      };
+    }
+
+    stack.push({ indent, key: normalizedKey });
+    offset += line.length + 1;
+  }
+
+  return undefined;
+}
+
+function normalizeTomlPath(path: string): string {
+  return path
+    .split(".")
+    .map((segment) => segment.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean)
+    .join(".");
 }
 
 export function filePathFromUri(uri: string): string | undefined {

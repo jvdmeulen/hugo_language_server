@@ -1,8 +1,9 @@
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import type { Location, Position } from "vscode-languageserver";
 
 import type { ProjectContext } from "./types.js";
-import { findNamedEntryPath } from "./project.js";
+import { findNamedEntryPath, findSiteParamConfigValue } from "./project.js";
 import { offsetAt, rangeFromOffsets } from "./utils.js";
 
 export function getDefinition(
@@ -22,6 +23,11 @@ export function getDefinition(
 
   if (!project?.hugoRoot) {
     return [];
+  }
+
+  const siteParamDefinition = getSiteParamDefinition(text, position, project.hugoRoot, options.relativePath);
+  if (siteParamDefinition) {
+    return [siteParamDefinition];
   }
 
   const shortcodeDefinition = getShortcodeDefinition(text, position, project.hugoRoot, project.themeRoots ?? []);
@@ -94,6 +100,56 @@ function findTemplateVariableDeclaration(
     .sort((left, right) => right.start - left.start);
 
   return declarations[0];
+}
+
+function getSiteParamDefinition(
+  text: string,
+  position: Position,
+  hugoRoot: string,
+  relativePath?: string,
+): Location | undefined {
+  if (!relativePath?.startsWith("layouts/")) {
+    return undefined;
+  }
+
+  const offset = offsetAt(text, position);
+
+  for (const action of text.matchAll(/{{-?[\s\S]*?}}/g)) {
+    const raw = action[0];
+    const actionStart = action.index ?? 0;
+    const actionEnd = actionStart + raw.length;
+
+    if (offset < actionStart || offset > actionEnd) {
+      continue;
+    }
+
+    const bodyOffset = raw.startsWith("{{-") ? 3 : 2;
+    const bodyStart = actionStart + bodyOffset;
+    const body = raw.slice(bodyOffset, raw.length - 2);
+
+    for (const tokenMatch of body.matchAll(/(^|[\s(|])((?:site|\.Site|\$\.Site)\.Params(?:\.[A-Za-z0-9_-]+)+)\b/g)) {
+      const token = tokenMatch[2] ?? "";
+      const tokenStart = bodyStart + (tokenMatch.index ?? 0) + (tokenMatch[1]?.length ?? 0);
+      const tokenEnd = tokenStart + token.length;
+
+      if (offset < tokenStart || offset > tokenEnd) {
+        continue;
+      }
+
+      const paramPath = token.replace(/^(?:site|\.Site|\$\.Site)\.Params\./, "");
+      const match = findSiteParamConfigValue(hugoRoot, paramPath);
+      if (!match) {
+        return undefined;
+      }
+
+      return {
+        uri: pathToFileURL(match.path).toString(),
+        range: rangeFromOffsets(readFileSync(match.path, "utf8"), match.startOffset, match.endOffset),
+      };
+    }
+  }
+
+  return undefined;
 }
 
 function collectTemplateVariableDeclarations(text: string): Array<{ name: string; start: number; end: number }> {

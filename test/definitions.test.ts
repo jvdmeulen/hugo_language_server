@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
@@ -128,4 +128,85 @@ test("jumps from range variable usage to declaration", () => {
 
   assert.equal(locations[0]?.uri, uri);
   assert.deepEqual(locations[0]?.range.start, { line: 0, character: 17 });
+});
+
+test("jumps from site params usage to config param definition", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-site-param-def-"));
+  const normalizedWorkspaceRoot = realpathSync(workspaceRoot);
+  mkdirSync(join(workspaceRoot, "layouts", "_default"), { recursive: true });
+  const configPath = join(workspaceRoot, "config.toml");
+  writeFileSync(
+    configPath,
+    'baseURL = "https://example.org"\n[params]\npromotedOnRubriek = "nieuws"\n',
+  );
+  const normalizedConfigPath = realpathSync(configPath);
+
+  const locations = getDefinition("{{ site.Params.promotedOnRubriek }}", { line: 0, character: 16 }, {
+    project: {
+      workspaceRoot,
+      hugoRoot: normalizedWorkspaceRoot,
+      isHugoProject: true,
+      contentRoots: [join(normalizedWorkspaceRoot, "content")],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/list.html",
+  });
+
+  assert.equal(locations[0]?.uri, pathToFileURL(normalizedConfigPath).toString());
+  assert.deepEqual(locations[0]?.range.start, { line: 2, character: 0 });
+});
+
+test("jumps from site params usage to uppercase Params config section", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-site-param-def-upper-"));
+  const normalizedWorkspaceRoot = realpathSync(workspaceRoot);
+  mkdirSync(join(workspaceRoot, "layouts", "_default"), { recursive: true });
+  const configPath = join(workspaceRoot, "config.toml");
+  writeFileSync(
+    configPath,
+    'baseURL = "https://example.org"\n[Params]\ndefaultPagesPerPaginate = 20\n',
+  );
+  const normalizedConfigPath = realpathSync(configPath);
+
+  const locations = getDefinition("{{ .Site.Params.defaultPagesPerPaginate }}", { line: 0, character: 18 }, {
+    project: {
+      workspaceRoot,
+      hugoRoot: normalizedWorkspaceRoot,
+      isHugoProject: true,
+      contentRoots: [join(normalizedWorkspaceRoot, "content")],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/list.html",
+  });
+
+  assert.equal(locations[0]?.uri, pathToFileURL(normalizedConfigPath).toString());
+  assert.deepEqual(locations[0]?.range.start, { line: 2, character: 0 });
+});
+
+test("jumps from root-context site params usage to config param definition", () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "hugo-lsp-site-param-def-root-"));
+  const normalizedWorkspaceRoot = realpathSync(workspaceRoot);
+  mkdirSync(join(workspaceRoot, "layouts", "_default"), { recursive: true });
+  const configPath = join(workspaceRoot, "config.toml");
+  writeFileSync(
+    configPath,
+    'baseURL = "https://example.org"\n[Params]\narticle_images = true\n',
+  );
+  const normalizedConfigPath = realpathSync(configPath);
+
+  const locations = getDefinition("{{ $.Site.Params.article_images }}", { line: 0, character: 18 }, {
+    project: {
+      workspaceRoot,
+      hugoRoot: normalizedWorkspaceRoot,
+      isHugoProject: true,
+      contentRoots: [join(normalizedWorkspaceRoot, "content")],
+      shortcodeNames: [],
+      partialNames: [],
+    },
+    relativePath: "layouts/_default/list.html",
+  });
+
+  assert.equal(locations[0]?.uri, pathToFileURL(normalizedConfigPath).toString());
+  assert.deepEqual(locations[0]?.range.start, { line: 2, character: 0 });
 });
