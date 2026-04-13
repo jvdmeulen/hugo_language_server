@@ -15,7 +15,7 @@ export function analyzeShortcodes(
   const shortcodeSet = new Set(shortcodeNames);
   const diagnostics: Diagnostic[] = [];
   const parsed: ParsedShortcode[] = [];
-  const stack: ParsedShortcode[] = [];
+  const unmatchedOpenings: ParsedShortcode[] = [];
   const shortcodeRegex = /{{[\s\S]*?}}/g;
 
   for (const match of text.matchAll(shortcodeRegex)) {
@@ -78,28 +78,35 @@ export function analyzeShortcodes(
     }
 
     if (closing) {
-      const open = stack.pop();
-      if (!open || open.name !== name || open.delimiter !== openingDelimiter) {
+      const openIndex = findMatchingOpeningIndex(unmatchedOpenings, shortcode);
+      if (openIndex === -1) {
         diagnostics.push({
           severity: DiagnosticSeverity.Error,
           message: `Closing shortcode "${name}" does not match an open shortcode.`,
           range,
           source: "hugo-lsp",
         });
+      } else {
+        unmatchedOpenings.splice(openIndex, 1);
       }
       continue;
     }
 
-    if (isLikelyPairedShortcode(body)) {
-      stack.push(shortcode);
-    }
+    unmatchedOpenings.push(shortcode);
   }
 
   return { diagnostics, parsed };
 }
 
-function isLikelyPairedShortcode(body: string): boolean {
-  return !body.includes("=") && !body.includes(`"`) && !body.includes(`'`);
+function findMatchingOpeningIndex(openings: ParsedShortcode[], closing: ParsedShortcode): number {
+  for (let index = openings.length - 1; index >= 0; index -= 1) {
+    const opening = openings[index];
+    if (opening?.name === closing.name && opening.delimiter === closing.delimiter) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function validateShortcodeParams(

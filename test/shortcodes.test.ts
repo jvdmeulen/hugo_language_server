@@ -26,6 +26,26 @@ test("reports mismatched closing shortcode", () => {
   );
 });
 
+test("accepts paired shortcodes with params and nested self-contained shortcodes", () => {
+  const diagnostics = analyzeDocument(`{{< vraagopmaak titel="is it working" >}}
+{{< vraag
+"vraag"= "Where can i register"
+"antwoord"= "You can register on the main page"
+>}}
+{{< /vraagopmaak >}}`, {
+    project: {
+      workspaceRoot: "/tmp/demo",
+      hugoRoot: "/tmp/demo",
+      isHugoProject: true,
+      contentRoots: ["/tmp/demo/content"],
+      shortcodeNames: ["vraagopmaak", "vraag"],
+      partialNames: [],
+    },
+  }).diagnostics;
+
+  assert.equal(diagnostics.length, 0);
+});
+
 test("offers shortcode completions in shortcode context", () => {
   const items = getCompletions("Intro\n{{< yo", { line: 1, character: 7 });
   const youtube = items.find((item) => item.label === "youtube");
