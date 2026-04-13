@@ -1,3 +1,4 @@
+import { relative } from "node:path";
 import type { Hover, MarkupContent, Position } from "vscode-languageserver";
 
 import { FRONT_MATTER_KEY_TYPES } from "./constants.js";
@@ -131,7 +132,7 @@ function getShortcodeHover(
           ? "Source: project shortcode under `layouts/shortcodes`."
         : "Source: not found in the current Hugo shortcode index.";
     const location = projectShortcodeEntry
-      ? `Location: \`${projectShortcodeEntry.path}\``
+      ? `Location: \`${formatProjectRelativeLocation(projectShortcodeEntry.path, project)}\``
       : "";
     const theme = projectShortcodeEntry?.source === "theme"
       ? `Theme: \`${projectShortcodeEntry.themeName ?? "unknown"}\``
@@ -289,6 +290,15 @@ function formatConfigValue(value: unknown): string {
   }
 
   return JSON.stringify(value, null, 2) ?? String(value);
+}
+
+function formatProjectRelativeLocation(path: string, project?: ProjectContext): string {
+  if (!project?.hugoRoot) {
+    return path;
+  }
+
+  const relativePath = relative(project.hugoRoot, path);
+  return relativePath.startsWith("..") ? path : relativePath;
 }
 
 function getActionTokenHover(

@@ -73,7 +73,7 @@ test("shows hover location and theme name for theme shortcodes", () => {
   const value = (hover?.contents as { value: string }).value;
   assert.match(value, /Theme shortcode detected in theme `demo-theme`/i);
   assert.match(value, /Theme: `demo-theme`/i);
-  assert.match(value, new RegExp(`Location: \`${themeRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/layouts/shortcodes/promo\\.html\``));
+  assert.match(value, /Location: `themes\/demo-theme\/layouts\/shortcodes\/promo\.html`/i);
   assert.match(value, /Source: theme shortcode under `themes\/demo-theme\/layouts\/shortcodes`/i);
 });
 
